@@ -62,14 +62,17 @@
   --secondary: oklch(0.97 0 0);
   --secondary-foreground: oklch(0.205 0 0);
   --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
+  /* 0.556 → 0.53: text-muted-foreground on bg-muted (Pill) was 4.34:1, just under 4.5:1. */
+  --muted-foreground: oklch(0.53 0 0);
   --accent: oklch(0.97 0 0);
   --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --success: oklch(0.55 0.15 150);
-  --warning: oklch(0.68 0.15 75);
-  --orange: oklch(0.64 0.19 45);
-  --info: oklch(0.56 0.15 250);
+  /* Darkened from shadcn defaults so text-on-tint (Pill) hits 4.5:1 in light mode; see
+     scripts/screenshots/tune-contrast.ts for how these were derived. */
+  --destructive: oklch(0.524 0.245 27.325);
+  --success: oklch(0.504 0.15 150);
+  --warning: oklch(0.518 0.15 75);
+  --orange: oklch(0.537 0.19 45);
+  --info: oklch(0.522 0.15 250);
   --border: oklch(0.922 0 0);
   --input: oklch(0.922 0 0);
   --ring: oklch(0.708 0 0);

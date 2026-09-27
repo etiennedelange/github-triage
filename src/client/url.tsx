@@ -25,7 +25,7 @@ export function useRepoFilter(): string | undefined {
 }
 
 /** An in-app link: a real `<a href>` (so middle-click and copy-link work) that navigates without a reload. */
-export function AppLink({ href, onClick, ...props }: AnchorHTMLAttributes<HTMLAnchorElement> & { href: string }) {
+export function AppLink({ href, onClick, children, ...props }: AnchorHTMLAttributes<HTMLAnchorElement> & { href: string }) {
   return (
     <a
       href={href}
@@ -36,6 +36,8 @@ export function AppLink({ href, onClick, ...props }: AnchorHTMLAttributes<HTMLAn
         e.preventDefault();
         navigate(href);
       }}
-    />
+    >
+      {children}
+    </a>
   );
 }

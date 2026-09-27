@@ -13,9 +13,12 @@ export function App() {
       <header className="flex items-center gap-2">
         <ShieldCheck aria-hidden className="size-5" />
         <h1 className="text-base font-semibold tracking-tight">GitHub Triage</h1>
-        <div className="ml-auto flex items-center gap-2">
+        <div className="ml-auto flex items-center gap-1.5 sm:gap-2">
           <LiveStatus />
-          <FxPicker />
+          {/* The effect picker is dev scaffolding (see refresh-fx.tsx); no room for it on narrow screens. */}
+          <div className="hidden sm:block">
+            <FxPicker />
+          </div>
           <RefreshButton />
           <ThemeToggle />
         </div>

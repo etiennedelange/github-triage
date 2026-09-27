@@ -150,7 +150,7 @@ function SecurityPanel({ repo, oauth }: { repo?: string; oauth: boolean }) {
             ))}
           </p>
           {forbidden && (
-            <p className={cn("flex items-start gap-1 rounded-md px-1.5 py-1", TONE.warning)}>
+            <p role="status" className={cn("flex items-start gap-1 rounded-md px-1.5 py-1", TONE.warning)}>
               <TriangleAlert aria-hidden className="mt-px size-3 shrink-0" />
               <span>
                 Some scanners returned 403, so their results are missing from this list. If you use a gh CLI token locally, run{" "}
@@ -158,7 +158,11 @@ function SecurityPanel({ repo, oauth }: { repo?: string; oauth: boolean }) {
               </span>
             </p>
           )}
-          {errored.length > 0 && <p className="text-destructive">Failed: {errored.join(", ")}</p>}
+          {errored.length > 0 && (
+            <p role="alert" className="text-destructive">
+              Failed: {errored.join(", ")}
+            </p>
+          )}
           {report.truncated.length > 0 && <p>Only the first 100 alerts shown for: {report.truncated.join(", ")}</p>}
         </div>
       }

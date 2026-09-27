@@ -71,7 +71,8 @@ function Row({ icon, title, url, number, meta, trailing, live }: LiveProp & {
           href={url}
           target="_blank"
           rel="noreferrer"
-          className="line-clamp-2 text-sm leading-snug font-medium break-words hover:underline"
+          // -my-1/py-1 grow the hit target to 24px tall on single-line titles without pushing the row's layout.
+          className="-my-1 line-clamp-2 py-1 text-sm leading-snug font-medium break-words hover:underline"
         >
           {title}
           {number !== undefined && <span className="ml-1 font-normal text-muted-foreground">#{number}</span>}
@@ -87,7 +88,8 @@ function RepoLink({ repo }: { repo: string }) {
   return (
     <AppLink
       href={`/?repo=${encodeURIComponent(repo)}`}
-      className="max-w-48 truncate font-mono hover:text-foreground hover:underline"
+      // -my-1.5/py-1.5 grow the hit target to 24px tall without pushing the row's layout.
+      className="-my-1.5 max-w-48 truncate py-1.5 font-mono hover:text-foreground hover:underline"
       title={`Show only ${repo}`}
     >
       {repo}

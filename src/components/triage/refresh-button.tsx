@@ -10,7 +10,7 @@ export function RefreshButton() {
   const { pending, run } = useRefreshFx();
   return (
     <Button variant="outline" size="sm" disabled={pending} onClick={(e) => run(e.currentTarget)}>
-      <RefreshCw className={cn(pending && "animate-spin motion-reduce:animate-none")} />
+      <RefreshCw data-icon="inline-start" className={cn(pending && "animate-spin motion-reduce:animate-none")} />
       {/* Both labels share one grid cell so the button never changes width (no layout shift). */}
       <span className="grid">
         <span aria-hidden className="invisible col-start-1 row-start-1">Refreshing</span>
