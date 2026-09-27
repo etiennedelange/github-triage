@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "context": {
+      "type": "http",
+      "url": "https://personal-context-mcp.etiennedelange.workers.dev/mcp",
+      "oauth": {
+        "callbackPort": 33418
+      }
+    }
+  }
+}

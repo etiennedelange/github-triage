@@ -1,4 +1,8 @@
 {
+  "enabledPlugins": {
+    "personal-context@personal-context": true,
+    "impeccable@impeccable": true
+  },
   "extraKnownMarketplaces": {
     "personal-context": {
       "source": {
@@ -6,8 +10,5 @@
         "repo": "etiennedelange/personal-context"
       }
     }
-  },
-  "enabledPlugins": {
-    "personal-context@personal-context": true
   }
 }
