@@ -2,6 +2,8 @@
 
 One pane for everything on GitHub that's waiting on you: pull requests, issues and security alerts.
 
+> **A personal tool.** This is built for my own use and shared as-is. It currently supports **one GitHub account** per deployment: a single login (`ALLOWED_LOGINS`) whose tokens, cache and live updates live in one Durable Object. Supporting several people would need per-user storage and routing webhooks to the right users. Feel free to deploy your own copy.
+
 **Light**
 
 ![The dashboard in light mode: review requests, your pull requests by next step, incoming pull requests, security alerts by severity, assigned and untriaged issues](docs/screenshots/dashboard-light.png)
