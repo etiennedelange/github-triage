@@ -1,6 +1,6 @@
 # GitHub Triage
 
-One pane for everything on GitHub that's waiting on you: pull requests, issues and security alerts.
+One pane for everything on GitHub that's waiting on you: pull requests, issues and security alerts. It updates in real time: when a PR is opened, reviewed or its checks finish, just that row changes on screen within a couple of seconds, with no reload.
 
 > **A personal tool.** This is built for my own use and shared as-is. It currently supports **one GitHub account** per deployment: a single login (`ALLOWED_LOGINS`) whose tokens, cache and live updates live in one Durable Object. Supporting several people would need per-user storage and routing webhooks to the right users. Feel free to deploy your own copy.
 
