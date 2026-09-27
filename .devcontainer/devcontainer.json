@@ -1,0 +1,25 @@
+{
+  "name": "github-triage",
+  "image": "mcr.microsoft.com/devcontainers/typescript-node:5-24-trixie",
+
+  "features": {
+    "ghcr.io/devcontainers/features/github-cli:1": {},
+    "ghcr.io/anthropics/devcontainer-features/claude-code:1.0": {}
+  },
+
+  "mounts": [
+    "source=claude-code-config-${devcontainerId},target=/home/node/.claude,type=volume"
+  ],
+
+  "remoteUser": "node",
+
+  "containerEnv": {
+    "CLAUDE_CONFIG_DIR": "/home/node/.claude"
+  },
+
+  "forwardPorts": [
+    3000
+  ],
+
+  "postCreateCommand": "sudo chown -R node:node /home/node/.claude && corepack enable"
+}
