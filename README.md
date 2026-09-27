@@ -2,6 +2,11 @@
 
 One pane for everything on GitHub that's waiting on you: pull requests, issues and security alerts.
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/dashboard-dark.png">
+  <img alt="The dashboard: review requests, your pull requests by next step, incoming pull requests, security alerts by severity, assigned and untriaged issues" src="docs/screenshots/dashboard-light.png">
+</picture>
+
 | Panel | What's in it |
 | --- | --- |
 | **Needs your review** | Open PRs where your review is requested |
@@ -104,7 +109,10 @@ pnpm test        # Vitest: triage rules, alert normalization, auth, webhooks
 pnpm typecheck
 pnpm lint
 pnpm build
+pnpm screenshots # regenerate docs/screenshots from fictional data
 ```
+
+`pnpm screenshots` runs the real app against a fake GitHub API (`scripts/screenshots/`) with made-up users, repos and alerts, then saves light and dark screenshots with Playwright. It uses its own Worker config and throwaway state, so it never reads your `.dev.vars` or touches your account. If Chromium is missing, run `pnpm exec playwright install chromium`.
 
 Stack: Vite + React 19 SPA, Hono on Cloudflare Workers, a Durable Object as the store (tokens, cache, live updates), TanStack Query, TypeScript, Tailwind CSS 4, shadcn/ui (radix-vega), Zod at the GitHub API boundary, Lucide, Motion, next-themes (a plain React library, despite the name).
 

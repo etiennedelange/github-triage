@@ -1,0 +1,20 @@
+{
+  // Screenshot runs only (`pnpm screenshots`): the real Worker against the fake GitHub API.
+  // Lives here so Wrangler reads no `.dev.vars` (it looks next to this file), never your real one.
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "github-triage-screenshots",
+  "main": "../../src/worker/index.ts",
+  "compatibility_date": "2026-09-20",
+  // No `global_fetch_strictly_public`: the Worker has to reach the fake API on 127.0.0.1.
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": { "run_worker_first": true, "not_found_handling": "single-page-application", "binding": "ASSETS" },
+  "durable_objects": { "bindings": [{ "name": "HUB", "class_name": "Hub" }] },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Hub"] }],
+  "vars": {
+    // Local mode (no GITHUB_CLIENT_ID): a fake token, sent only to the fake API.
+    "GITHUB_TOKEN": "fake-token-for-screenshots",
+    "GITHUB_API_URL": "http://127.0.0.1:4010",
+    "TRIAGE_OWNERS": "acme",
+    "ALLOWED_LOGINS": ""
+  }
+}

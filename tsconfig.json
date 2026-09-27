@@ -10,11 +10,12 @@
     "resolveJsonModule": true,
     "isolatedModules": true,
     "verbatimModuleSyntax": false,
+    "allowImportingTsExtensions": true,
     "jsx": "react-jsx",
     "paths": {
       "@/*": ["./src/*"]
     }
   },
-  "include": ["src", "cloudflare-env.d.ts", "vite.config.ts", "vitest.config.mts", "eslint.config.mjs"],
+  "include": ["src", "scripts", "cloudflare-env.d.ts", "vite.config.ts", "vitest.config.mts", "eslint.config.mjs"],
   "exclude": ["node_modules", "dist", ".wrangler"]
 }
