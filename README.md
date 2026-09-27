@@ -2,10 +2,13 @@
 
 One pane for everything on GitHub that's waiting on you: pull requests, issues and security alerts.
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/dashboard-dark.png">
-  <img alt="The dashboard: review requests, your pull requests by next step, incoming pull requests, security alerts by severity, assigned and untriaged issues" src="docs/screenshots/dashboard-light.png">
-</picture>
+**Light**
+
+![The dashboard in light mode: review requests, your pull requests by next step, incoming pull requests, security alerts by severity, assigned and untriaged issues](docs/screenshots/dashboard-light.png)
+
+**Dark**
+
+![The same dashboard in dark mode](docs/screenshots/dashboard-dark.png)
 
 | Panel | What's in it |
 | --- | --- |
