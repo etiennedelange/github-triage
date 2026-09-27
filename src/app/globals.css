@@ -1,0 +1,346 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-geist-mono);
+  --font-heading: var(--font-sans);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-orange: var(--orange);
+  --color-info: var(--info);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+:root {
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.145 0 0);
+  --primary: oklch(0.205 0 0);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.97 0 0);
+  --secondary-foreground: oklch(0.205 0 0);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+  --accent: oklch(0.97 0 0);
+  --accent-foreground: oklch(0.205 0 0);
+  --destructive: oklch(0.577 0.245 27.325);
+  --success: oklch(0.55 0.15 150);
+  --warning: oklch(0.68 0.15 75);
+  --orange: oklch(0.64 0.19 45);
+  --info: oklch(0.56 0.15 250);
+  --border: oklch(0.922 0 0);
+  --input: oklch(0.922 0 0);
+  --ring: oklch(0.708 0 0);
+  --chart-1: oklch(0.87 0 0);
+  --chart-2: oklch(0.556 0 0);
+  --chart-3: oklch(0.439 0 0);
+  --chart-4: oklch(0.371 0 0);
+  --chart-5: oklch(0.269 0 0);
+  --radius: 0.625rem;
+  --sidebar: oklch(0.985 0 0);
+  --sidebar-foreground: oklch(0.145 0 0);
+  --sidebar-primary: oklch(0.205 0 0);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.97 0 0);
+  --sidebar-accent-foreground: oklch(0.205 0 0);
+  --sidebar-border: oklch(0.922 0 0);
+  --sidebar-ring: oklch(0.708 0 0);
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+}
+
+.dark {
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.205 0 0);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.205 0 0);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.922 0 0);
+  --primary-foreground: oklch(0.205 0 0);
+  --secondary: oklch(0.269 0 0);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.269 0 0);
+  --muted-foreground: oklch(0.708 0 0);
+  --accent: oklch(0.269 0 0);
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.704 0.191 22.216);
+  --success: oklch(0.74 0.16 150);
+  --warning: oklch(0.82 0.15 85);
+  --orange: oklch(0.75 0.16 50);
+  --info: oklch(0.72 0.13 250);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.556 0 0);
+  --chart-1: oklch(0.87 0 0);
+  --chart-2: oklch(0.556 0 0);
+  --chart-3: oklch(0.439 0 0);
+  --chart-4: oklch(0.371 0 0);
+  --chart-5: oklch(0.269 0 0);
+  --sidebar: oklch(0.205 0 0);
+  --sidebar-foreground: oklch(0.985 0 0);
+  --sidebar-primary: oklch(0.488 0.243 264.376);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.269 0 0);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.556 0 0);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  html {
+    @apply font-sans;
+  }
+}
+/* ───────────── Refresh effects (see components/triage/refresh-fx.tsx) ─────────────
+   Driven by [data-fx] + [data-phase] on the RefreshFx wrapper. Per-target stagger
+   comes from --fx-d (panel) and --fx-r (row), set in JS from geometry. Only
+   transform/opacity/box-shadow and fixed overlays: no layout shift. */
+
+[data-fx-panel] {
+  position: relative;
+  isolation: isolate;
+}
+[data-fx-panel]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0;
+}
+
+.fx-odo-col {
+  display: inline-block;
+  height: 1lh;
+  overflow: hidden;
+}
+.fx-odo-reel {
+  display: flex;
+  flex-direction: column;
+  transform: translateY(var(--to));
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  /* ── Radar ── */
+  .fx-radar-field {
+    position: absolute;
+    width: 260vmax;
+    height: 260vmax;
+    translate: -50% -50%;
+    mask-image: radial-gradient(circle, #000 0 22%, transparent 38%);
+  }
+  .fx-radar-rings {
+    position: absolute;
+    inset: 0;
+    background: repeating-radial-gradient(
+      circle,
+      transparent 0 calc(9vmax - 1px),
+      color-mix(in oklab, var(--info) 30%, transparent) calc(9vmax - 1px) 9vmax
+    );
+  }
+  .fx-radar-beam {
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    background: conic-gradient(
+      from 0deg,
+      transparent 0deg 290deg,
+      color-mix(in oklab, var(--info) 10%, transparent) 300deg,
+      color-mix(in oklab, var(--info) 40%, transparent) 358deg,
+      color-mix(in oklab, var(--info) 85%, transparent) 359.6deg,
+      transparent 360deg
+    );
+    animation: fx-spin 1.8s linear infinite;
+  }
+  .fx-shockwave {
+    position: absolute;
+    translate: -50% -50%;
+    border-radius: 50%;
+    border: 2px solid var(--info);
+    box-shadow:
+      0 0 24px color-mix(in oklab, var(--info) 60%, transparent),
+      inset 0 0 40px color-mix(in oklab, var(--info) 25%, transparent);
+  }
+  .fx-shockwave-soft {
+    border-width: 1px;
+    box-shadow: none;
+    background: radial-gradient(circle, transparent 60%, color-mix(in oklab, var(--info) 14%, transparent));
+  }
+  [data-fx="radar"][data-phase="landing"] [data-fx-panel] {
+    animation: fx-ping 900ms var(--fx-d, 0ms) cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  }
+  [data-fx="radar"][data-phase="landing"] [data-fx-panel]::after {
+    background: color-mix(in oklab, var(--info) 14%, transparent);
+    animation: fx-flash 700ms var(--fx-d, 0ms) ease-out both;
+  }
+
+  /* ── Cascade ── */
+  [data-fx="cascade"][data-phase="pending"] [data-fx-panel] > ul,
+  [data-fx="cascade"][data-phase="pending"] [data-fx-panel] > span {
+    opacity: 0.45;
+    transition: opacity 300ms;
+  }
+  [data-fx="cascade"][data-phase="pending"] [data-fx-panel]::after {
+    opacity: 1;
+    background: linear-gradient(
+      105deg,
+      transparent 35%,
+      color-mix(in oklab, var(--foreground) 9%, transparent) 50%,
+      transparent 65%
+    );
+    background-size: 300% 100%;
+    animation: fx-shimmer 1.3s ease-in-out infinite;
+    animation-delay: calc(var(--fx-i, 0) * 80ms);
+  }
+  [data-fx="cascade"][data-phase="landing"] [data-fx-panel] {
+    animation: fx-deal 460ms var(--fx-d, 0ms) cubic-bezier(0.2, 0.9, 0.25, 1.12) both;
+  }
+  [data-fx="cascade"][data-phase="landing"] [data-fx-panel] li {
+    animation: fx-rise 420ms calc(var(--fx-d, 0ms) + 90ms + var(--fx-r, 0ms)) cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  }
+  [data-fx="cascade"][data-phase="landing"] .fx-odo-reel {
+    animation: fx-odo 900ms calc(var(--fx-d, 0ms) + var(--i, 0) * 90ms) cubic-bezier(0.3, 0.1, 0.1, 1) both;
+  }
+
+  /* ── Decrypt ── */
+  .fx-crt {
+    position: absolute;
+    inset: 0;
+    background:
+      repeating-linear-gradient(
+        0deg,
+        color-mix(in oklab, var(--success) 7%, transparent) 0 1px,
+        transparent 1px 3px
+      ),
+      radial-gradient(ellipse at center, transparent 55%, color-mix(in oklab, var(--foreground) 10%, transparent));
+  }
+  .fx-scanline {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    height: 18vh;
+    background: linear-gradient(to bottom, transparent, color-mix(in oklab, var(--success) 12%, transparent));
+    border-bottom: 2px solid color-mix(in oklab, var(--success) 85%, transparent);
+    box-shadow: 0 4px 18px color-mix(in oklab, var(--success) 55%, transparent);
+  }
+  .fx-scanline-final {
+    background: linear-gradient(to bottom, transparent, color-mix(in oklab, var(--success) 22%, transparent));
+  }
+  [data-fx="decrypt"][data-phase="landing"] [data-fx-panel] {
+    animation: fx-phosphor 800ms calc(var(--fx-d, 0ms) + 60ms) ease-out both;
+  }
+  [data-fx="decrypt"][data-phase="landing"] [data-fx-panel]::after {
+    background: color-mix(in oklab, var(--success) 16%, transparent);
+    animation: fx-flash 650ms calc(var(--fx-d, 0ms) + 60ms) ease-out both;
+  }
+}
+
+@keyframes fx-spin {
+  to {
+    rotate: 360deg;
+  }
+}
+@keyframes fx-ping {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in oklab, var(--info) 65%, transparent);
+    border-color: var(--info);
+  }
+  100% {
+    box-shadow: 0 0 0 14px transparent;
+  }
+}
+@keyframes fx-flash {
+  0% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+@keyframes fx-shimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -50% 0;
+  }
+}
+@keyframes fx-deal {
+  from {
+    opacity: 0;
+    transform: perspective(1000px) rotateX(-16deg) translateY(14px) scale(0.97);
+  }
+}
+@keyframes fx-rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+    filter: blur(4px);
+  }
+}
+@keyframes fx-odo {
+  from {
+    transform: translateY(0);
+  }
+}
+@keyframes fx-phosphor {
+  0% {
+    border-color: var(--success);
+    box-shadow:
+      0 0 0 1px color-mix(in oklab, var(--success) 70%, transparent),
+      0 0 28px color-mix(in oklab, var(--success) 35%, transparent);
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
