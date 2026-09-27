@@ -4,6 +4,10 @@ import { z } from "zod";
 
 const label = z.object({ name: z.string(), color: z.string() });
 const actor = z.object({ login: z.string() }).nullable();
+// A User (login), a Team (slug + org), or null/other for deleted accounts, bots and mannequins.
+const reviewer = z
+  .object({ login: z.string().optional(), slug: z.string().optional(), organization: z.object({ login: z.string() }).optional() })
+  .nullable();
 
 const baseItem = {
   number: z.number(),
@@ -12,7 +16,7 @@ const baseItem = {
   createdAt: z.string(),
   updatedAt: z.string(),
   author: actor,
-  repository: z.object({ nameWithOwner: z.string() }),
+  repository: z.object({ nameWithOwner: z.string(), isArchived: z.boolean() }),
   labels: z.object({ nodes: z.array(label) }),
   comments: z.object({ totalCount: z.number() }),
 };
@@ -21,6 +25,8 @@ export const pullRequestNode = z
   .object({
     __typename: z.literal("PullRequest"),
     ...baseItem,
+    state: z.enum(["OPEN", "CLOSED", "MERGED"]),
+    reviewRequests: z.object({ nodes: z.array(z.object({ requestedReviewer: reviewer })) }),
     isDraft: z.boolean(),
     reviewDecision: z.enum(["APPROVED", "CHANGES_REQUESTED", "REVIEW_REQUIRED"]).nullable(),
     mergeable: z.enum(["MERGEABLE", "CONFLICTING", "UNKNOWN"]),
@@ -49,6 +55,11 @@ export const pullRequestNode = z
     repo: n.repository.nameWithOwner,
     labels: n.labels.nodes,
     comments: n.comments.totalCount,
+    open: n.state === "OPEN" && !n.repository.isArchived,
+    // Users by login, teams as "org/slug": what `review-requested:@me` matches against.
+    reviewers: n.reviewRequests.nodes.flatMap(({ requestedReviewer: r }) =>
+      r?.login ? [r.login] : r?.slug && r.organization ? [`${r.organization.login}/${r.slug}`] : [],
+    ),
     isDraft: n.isDraft,
     review: n.reviewDecision,
     conflicting: n.mergeable === "CONFLICTING",
@@ -61,6 +72,7 @@ export const issueNode = z
   .object({
     __typename: z.literal("Issue"),
     ...baseItem,
+    state: z.enum(["OPEN", "CLOSED"]),
     assignees: z.object({ nodes: z.array(z.object({ login: z.string() })) }),
   })
   .transform((n) => ({
@@ -74,6 +86,7 @@ export const issueNode = z
     repo: n.repository.nameWithOwner,
     labels: n.labels.nodes,
     comments: n.comments.totalCount,
+    open: n.state === "OPEN" && !n.repository.isArchived,
     assignees: n.assignees.nodes.map((a) => a.login),
   }));
 
@@ -122,6 +135,46 @@ export function sortByNextStep(prs: PullRequest[]): PullRequest[] {
     (a, b) =>
       NEXT_STEP_RANK[prNextStep(a)] - NEXT_STEP_RANK[prNextStep(b)] || b.updatedAt.localeCompare(a.updatedAt),
   );
+}
+
+// ---------- Inbox sections ----------
+
+export const INBOX_SECTIONS = ["review", "mine", "incoming", "assigned", "untriaged"] as const;
+export type InboxSection = (typeof INBOX_SECTIONS)[number];
+
+export type SectionContext = {
+  /** Your login. */
+  viewer: string;
+  /** Owners whose repos count as yours: you plus TRIAGE_OWNERS. */
+  owners: string[];
+  /** Teams you're on, as "org/slug". */
+  teams: string[];
+};
+
+/**
+ * Which inbox sections an item belongs in. Mirrors the search queries in `fetchInbox`
+ * (and its review/incoming dedupe), so a single item fetched after a webhook lands
+ * exactly where a full refetch would have put it.
+ */
+export function sectionsFor(item: PullRequest | Issue, ctx: SectionContext): InboxSection[] {
+  if (!item.open) return [];
+  const eq = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
+  const isMe = (login: string) => eq(login, ctx.viewer);
+  const owned = ctx.owners.some((o) => eq(o, item.repo.split("/")[0]));
+
+  if (item.kind === "issue") {
+    const out: InboxSection[] = [];
+    if (item.assignees.some(isMe)) out.push("assigned");
+    if (item.assignees.length === 0 && owned) out.push("untriaged");
+    return out;
+  }
+
+  const out: InboxSection[] = [];
+  const requested = item.reviewers.some((r) => isMe(r) || ctx.teams.some((t) => eq(t, r)));
+  if (requested) out.push("review");
+  if (isMe(item.author)) out.push("mine");
+  else if (owned && !requested) out.push("incoming");
+  return out;
 }
 
 // ---------- Security alerts (REST) ----------

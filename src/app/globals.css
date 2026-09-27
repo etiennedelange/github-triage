@@ -285,6 +285,38 @@
   }
 }
 
+/* ── Live updates (components/triage/live.tsx): a row that arrived or changed glows once. ── */
+@media (prefers-reduced-motion: no-preference) {
+  [data-live] {
+    animation: live-glow 2.4s ease-out both;
+  }
+  .live-dot[data-status="live"]::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: inherit;
+    animation: live-pulse 2.4s ease-out infinite;
+  }
+}
+@keyframes live-glow {
+  0%,
+  25% {
+    background-color: color-mix(in oklab, var(--info) 14%, transparent);
+    box-shadow: inset 2px 0 0 var(--info);
+  }
+}
+@keyframes live-pulse {
+  from {
+    opacity: 0.6;
+    scale: 1;
+  }
+  to {
+    opacity: 0;
+    scale: 2.6;
+  }
+}
+
 @keyframes fx-spin {
   to {
     rotate: 360deg;

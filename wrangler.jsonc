@@ -1,0 +1,33 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "github-triage",
+  // Custom entry: routes auth, the webhook and the live socket, then hands the rest to OpenNext.
+  "main": "worker.ts",
+  "compatibility_date": "2026-09-20",
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  "assets": { "directory": ".open-next/assets", "binding": "ASSETS" },
+  "services": [{ "binding": "WORKER_SELF_REFERENCE", "service": "github-triage" }],
+  // `use cache` entries live in R2 and cache tags in D1, so `updateTag` reaches every isolate.
+  "r2_buckets": [{ "binding": "NEXT_INC_CACHE_R2_BUCKET", "bucket_name": "github-triage-opennext-cache" }],
+  "d1_databases": [
+    {
+      "binding": "NEXT_TAG_CACHE_D1",
+      "database_name": "github-triage-tags",
+      // Replace with the id from `wrangler d1 create github-triage-tags`.
+      "database_id": "eeabdbd7-b12d-4792-bc08-69e93ee2d4d7"
+    }
+  ],
+  "durable_objects": { "bindings": [{ "name": "HUB", "class_name": "Hub" }] },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Hub"] }],
+  "vars": {
+    // Comma-separated GitHub logins allowed to sign in.
+    "ALLOWED_LOGINS": "etiennedelange",
+    "TRIAGE_OWNERS": ""
+  },
+  "observability": {
+    "logs": {
+      "enabled": true,
+      "invocation_logs": true
+    }
+  }
+}

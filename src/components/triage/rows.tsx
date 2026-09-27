@@ -52,7 +52,10 @@ export function Pill({ tone, children, className }: { tone: Tone; children: Reac
   );
 }
 
-function Row({ icon, title, url, number, meta, trailing }: {
+/** `live`: arrived or changed via a live update; the row flashes once (see [data-live] in globals.css). */
+type LiveProp = { live?: boolean };
+
+function Row({ icon, title, url, number, meta, trailing, live }: LiveProp & {
   icon: ReactNode;
   title: string;
   url: string;
@@ -61,7 +64,7 @@ function Row({ icon, title, url, number, meta, trailing }: {
   trailing?: ReactNode;
 }) {
   return (
-    <li className="flex items-start gap-2.5 px-3 py-2 transition-colors hover:bg-muted/40">
+    <li data-live={live || undefined} className="flex items-start gap-2.5 px-3 py-2 transition-colors hover:bg-muted/40">
       <span className="mt-0.5 shrink-0">{icon}</span>
       <div className="min-w-0 flex-1">
         <a
@@ -169,7 +172,7 @@ const REVIEW: Record<NonNullable<PullRequest["review"]>, { label: string; tone: 
  * `perspective` picks what matters: as the author you want your next step;
  * as a reviewer/maintainer you want size and the current review state.
  */
-export function PrRow({ pr, perspective }: { pr: PullRequest; perspective: "author" | "reviewer" }) {
+export function PrRow({ pr, perspective, live }: LiveProp & { pr: PullRequest; perspective: "author" | "reviewer" }) {
   const Icon = pr.isDraft ? GitPullRequestDraft : GitPullRequest;
   const step = NEXT_STEP[prNextStep(pr)];
   const review = pr.review && REVIEW[pr.review];
@@ -179,6 +182,7 @@ export function PrRow({ pr, perspective }: { pr: PullRequest; perspective: "auth
       title={pr.title}
       url={pr.url}
       number={pr.number}
+      live={live}
       meta={
         <>
           <CommonMeta item={pr} />
@@ -205,13 +209,14 @@ export function PrRow({ pr, perspective }: { pr: PullRequest; perspective: "auth
   );
 }
 
-export function IssueRow({ issue }: { issue: Issue }) {
+export function IssueRow({ issue, live }: LiveProp & { issue: Issue }) {
   return (
     <Row
       icon={<CircleDot aria-label="Issue" className="size-4 text-success" />}
       title={issue.title}
       url={issue.url}
       number={issue.number}
+      live={live}
       meta={<CommonMeta item={issue} />}
     />
   );
@@ -231,13 +236,14 @@ export const SOURCE: Record<AlertSource, { icon: typeof Package; label: string }
   "secret-scanning": { icon: KeyRound, label: "Secret scanning" },
 };
 
-export function AlertRow({ alert }: { alert: SecurityAlert }) {
+export function AlertRow({ alert, live }: LiveProp & { alert: SecurityAlert }) {
   const source = SOURCE[alert.source];
   return (
     <Row
       icon={<source.icon aria-label={source.label} className="size-4 text-muted-foreground" />}
       title={alert.title}
       url={alert.url}
+      live={live}
       meta={
         <>
           <RepoLink repo={alert.repo} />

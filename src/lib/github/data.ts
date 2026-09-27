@@ -1,32 +1,43 @@
 import "server-only";
 
-import { cacheLife, cacheTag } from "next/cache";
+import { unstable_cache } from "next/cache";
 import { z } from "zod";
 
-import {
-  codeScanningAlert,
-  dependabotAlert,
-  issueNode,
-  pullRequestNode,
-  secretScanningAlert,
-  type AlertSource,
-  type ScannerStatus,
-  type SecurityAlert,
-} from "@/lib/triage";
+import { issueNode, pullRequestNode, type AlertSource, type InboxSection } from "@/lib/triage";
 
-import { GitHubError, graphql, mapLimit, MissingTokenError, rest } from "./client";
+import { GitHubError, graphql, mapLimit, MissingTokenError, oauthEnabled, rest, withToken } from "./client";
+import { ITEM_FRAGMENTS } from "./fragments";
+import { scanOne, SCANNERS, type SecurityReport } from "./security";
 
+export type { SecurityReport } from "./security";
+
+export type { InboxSection } from "@/lib/triage";
+
+/** Inbox & rate limits: cheap to refetch, so a manual refresh invalidates this. */
 export const GITHUB_TAG = "github";
+/** Security scan: expensive (fans out per repo), so it revalidates on its own schedule instead of on every manual refresh. */
+export const GITHUB_SECURITY_TAG = "github-security";
 
 /**
- * Cached functions return failures as values: errors thrown across a `use cache`
- * boundary are redacted in production, which would hide "no token" from the UI.
+ * Public getters return failures as values, so the UI can say "no token" or "scanning"
+ * instead of hitting an error boundary. The cached parts throw, so failures are never cached.
+ *
+ * Caching uses `unstable_cache`, not `use cache`: Cache Components (which `use cache` needs)
+ * hangs page streaming on production Workers (opennextjs/opennextjs-cloudflare#1225).
  */
-export type Failure = { kind: "no-token" | "github" | "unexpected"; message: string; status?: number };
+export type Failure = { kind: "no-token" | "github" | "unexpected" | "scanning"; message: string; status?: number };
 export type Result<T> = { ok: true; data: T } | { ok: false; error: Failure };
+
+/** The Hub hasn't finished its first background scan yet: not an error, just not ready. */
+class ScanPendingError extends Error {
+  constructor() {
+    super("Scanning your repos for security alerts — this can take a minute on first load.");
+  }
+}
 
 function toFailure(err: unknown): Failure {
   if (err instanceof MissingTokenError) return { kind: "no-token", message: err.message };
+  if (err instanceof ScanPendingError) return { kind: "scanning", message: err.message };
   if (err instanceof GitHubError) return { kind: "github", message: err.message, status: err.status };
   if (err instanceof z.ZodError) return { kind: "unexpected", message: `Unexpected GitHub response: ${z.prettifyError(err)}` };
   return { kind: "unexpected", message: err instanceof Error ? err.message : String(err) };
@@ -44,13 +55,6 @@ const maxRepos = () => Number(process.env.TRIAGE_MAX_REPOS) || 50;
 
 // ---------- Inbox: PRs & issues in a single GraphQL round trip ----------
 
-const ITEM_FIELDS = `
-  number title url createdAt updatedAt
-  author { login }
-  repository { nameWithOwner }
-  labels(first: 5) { nodes { name color } }
-  comments { totalCount }`;
-
 const INBOX_QUERY = `
 query Inbox($review: String!, $mine: String!, $incoming: String!, $assigned: String!, $untriaged: String!) {
   viewer { login avatarUrl }
@@ -60,15 +64,7 @@ query Inbox($review: String!, $mine: String!, $incoming: String!, $assigned: Str
   assigned: search(query: $assigned, type: ISSUE, first: 50) { issueCount nodes { ...Issue } }
   untriaged: search(query: $untriaged, type: ISSUE, first: 50) { issueCount nodes { ...Issue } }
 }
-fragment PR on PullRequest {
-  __typename ${ITEM_FIELDS}
-  isDraft reviewDecision mergeable additions deletions
-  commits(last: 1) { nodes { commit { statusCheckRollup { state } } } }
-}
-fragment Issue on Issue {
-  __typename ${ITEM_FIELDS}
-  assignees(first: 3) { nodes { login } }
-}`;
+${ITEM_FRAGMENTS}`;
 
 const searchOf = <T extends z.ZodType>(node: T) =>
   z.object({ issueCount: z.number(), nodes: z.array(node) }).transform((s) => ({ total: s.issueCount, items: s.nodes }));
@@ -82,32 +78,37 @@ const inboxResponse = z.object({
   untriaged: searchOf(issueNode),
 });
 
-export type InboxSection = "review" | "mine" | "incoming" | "assigned" | "untriaged";
-export type Inbox = z.output<typeof inboxResponse> & { queries: Record<InboxSection, string> };
+export type Inbox = z.output<typeof inboxResponse> & {
+  queries: Record<InboxSection, string>;
+  /** When GitHub was asked; live updates older than this are already in the snapshot. */
+  fetchedAt: string;
+};
 
-let loginPromise: Promise<string> | undefined;
+let login: string | undefined;
 
-/** Memoized for the process: the token's owner doesn't change while it runs. */
-function viewerLogin(): Promise<string> {
-  loginPromise ??= graphql<{ viewer: { login: string } }>("query { viewer { login } }", {}).then((d) => d.viewer.login);
-  loginPromise.catch(() => (loginPromise = undefined));
-  return loginPromise;
+/**
+ * Memoized for the process: the token's owner doesn't change while it runs. Caches the
+ * value, not the promise: on Workers a promise whose fetch belongs to one request never
+ * settles for another, so sharing an in-flight promise can hang every later request.
+ */
+async function viewerLogin(): Promise<string> {
+  login ??= (await graphql<{ viewer: { login: string } }>("query { viewer { login } }", {})).viewer.login;
+  return login;
 }
 
+// Single-user app: the cache is global. A multi-user version must key these by login.
+const cachedInbox = unstable_cache(() => fetchInbox(), ["inbox"], { tags: [GITHUB_TAG], revalidate: 60 });
+
 export async function getInbox(): Promise<Result<Inbox>> {
-  "use cache";
-  cacheTag(GITHUB_TAG);
   try {
-    const data = await fetchInbox();
-    cacheLife("minutes");
-    return { ok: true, data };
+    return { ok: true, data: await cachedInbox() };
   } catch (err) {
-    cacheLife("seconds"); // don't pin a failure; the next request retries
     return { ok: false, error: toFailure(err) };
   }
 }
 
 async function fetchInbox(): Promise<Inbox> {
+  const fetchedAt = new Date().toISOString();
   const owners = [await viewerLogin(), ...extraOwners()].map((o) => `user:${o}`).join(" ");
   const open = "is:open archived:false sort:updated-desc";
   const queries = {
@@ -126,7 +127,7 @@ async function fetchInbox(): Promise<Inbox> {
     total: data.incoming.total - (data.incoming.items.length - incoming.length),
     items: incoming,
   };
-  return { ...data, queries };
+  return { ...data, queries, fetchedAt };
 }
 
 // ---------- Rate limits ----------
@@ -140,11 +141,8 @@ const rateLimitResponse = z.object({ resources: z.object({ graphql: budget, core
 
 export type RateLimits = { graphql: z.output<typeof budget>; rest: z.output<typeof budget> };
 
-/** Both API budgets. `/rate_limit` doesn't count against either, so it can stay nearly live. */
+/** Both API budgets. `/rate_limit` doesn't count against either, so it's fetched live, uncached. */
 export async function getRateLimits(): Promise<Result<RateLimits>> {
-  "use cache";
-  cacheTag(GITHUB_TAG);
-  cacheLife("seconds");
   try {
     const { resources } = rateLimitResponse.parse(await rest("/rate_limit"));
     return { ok: true, data: { graphql: resources.graphql, rest: resources.core } };
@@ -156,10 +154,13 @@ export async function getRateLimits(): Promise<Result<RateLimits>> {
 // ---------- Security: Dependabot, code scanning & secret scanning per repo ----------
 
 const repoList = z.array(
-  z.object({ full_name: z.string(), archived: z.boolean(), fork: z.boolean() }),
+  z.object({ full_name: z.string(), archived: z.boolean(), fork: z.boolean(), pushed_at: z.string().nullish() }),
 );
 
-/** Your repos plus TRIAGE_OWNERS' repos (incl. private org repos), most recently pushed first. */
+/**
+ * Your repos plus TRIAGE_OWNERS' repos (incl. private org repos), most recently pushed first.
+ * Local/dev only (no GitHub App token): deployed, the Hub scans installed repos instead.
+ */
 async function listRepos(): Promise<string[]> {
   const owners = new Set([await viewerLogin(), ...extraOwners()].map((o) => o.toLowerCase()));
   const affiliation = owners.size > 1 ? "owner,organization_member" : "owner";
@@ -177,64 +178,32 @@ async function listRepos(): Promise<string[]> {
   return wanted.slice(0, maxRepos());
 }
 
-const ALERT_PAGE = 100;
+// Local/dev has no Hub, so it fans out live here; cache that for 15 minutes.
+const cachedLocalSecurity = unstable_cache(() => fetchSecurity(), ["security"], { tags: [GITHUB_SECURITY_TAG], revalidate: 900 });
 
-const SCANNERS = {
-  dependabot: { path: "dependabot/alerts", schema: dependabotAlert },
-  "code-scanning": { path: "code-scanning/alerts", schema: codeScanningAlert },
-  "secret-scanning": { path: "secret-scanning/alerts", schema: secretScanningAlert },
-} satisfies Record<AlertSource, { path: string; schema: z.ZodType }>;
-
-type ScanResult = { status: ScannerStatus; message?: string; alerts: SecurityAlert[]; truncated: boolean };
-
-async function scan(repo: string, source: AlertSource): Promise<ScanResult> {
-  const { path, schema } = SCANNERS[source];
+export async function getSecurity(): Promise<Result<SecurityReport>> {
   try {
-    const raw = await rest<unknown[]>(`/repos/${repo}/${path}?state=open&per_page=${ALERT_PAGE}`);
-    const alerts = z
-      .array(schema)
-      .parse(raw)
-      .map((a) => ({ ...a, repo }) as SecurityAlert);
-    return { status: "ok", alerts, truncated: raw.length === ALERT_PAGE };
+    // Deployed, the Hub Durable Object owns the fan-out (chunked across its own alarm ticks,
+    // so one Worker invocation never has to make 3-calls-per-repo all at once) and already
+    // stores the finished report, so reading it needs no further cache.
+    return { ok: true, data: oauthEnabled() ? await fetchSecurityFromHub() : await cachedLocalSecurity() };
   } catch (err) {
-    if (!(err instanceof GitHubError)) throw err;
-    // 404 = feature off / no analysis yet; 403 = feature off, or the token lacks the scope.
-    const status: ScannerStatus =
-      err.status === 404 || /disabled|not enabled|no analysis/i.test(err.message)
-        ? "disabled"
-        : err.status === 403
-          ? "forbidden"
-          : "error";
-    return { status, message: err.message, alerts: [], truncated: false };
+    return { ok: false, error: toFailure(err) };
   }
 }
 
-export type SecurityReport = {
-  alerts: SecurityAlert[];
-  repos: { repo: string; scanners: Record<AlertSource, { status: ScannerStatus; message?: string }> }[];
-  truncated: string[];
-  scannedAt: string;
-};
-
-export async function getSecurity(): Promise<Result<SecurityReport>> {
-  "use cache";
-  cacheTag(GITHUB_TAG);
-  try {
-    const data = await fetchSecurity();
-    // Fans out to 3 calls per repo, so refresh less eagerly than the inbox.
-    cacheLife({ stale: 300, revalidate: 900, expire: 3600 });
-    return { ok: true, data };
-  } catch (err) {
-    cacheLife("seconds");
-    return { ok: false, error: toFailure(err) };
-  }
+async function fetchSecurityFromHub(): Promise<SecurityReport> {
+  const { hub } = await import("@/edge/binding");
+  const report = await (await hub()).getSecurityReport();
+  if (!report) throw new ScanPendingError();
+  return report;
 }
 
 async function fetchSecurity(): Promise<SecurityReport> {
   const repos = await listRepos();
   const sources = Object.keys(SCANNERS) as AlertSource[];
   const jobs = repos.flatMap((repo) => sources.map((source) => ({ repo, source })));
-  const results = await mapLimit(jobs, 6, ({ repo, source }) => scan(repo, source));
+  const results = await mapLimit(jobs, 6, ({ repo, source }) => withToken((auth) => scanOne(auth, repo, source)));
 
   const report: SecurityReport = { alerts: [], repos: [], truncated: [], scannedAt: new Date().toISOString() };
   repos.forEach((repo, r) => {

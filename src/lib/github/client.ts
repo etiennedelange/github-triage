@@ -1,95 +1,73 @@
 import "server-only";
 
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
+import * as http from "./http";
+import { GitHubError } from "./http";
+
+export { GitHubError, mapLimit } from "./http";
 
 // Overridable for tests / mock servers; GraphQL is expected at `${API}/graphql`.
-const API = process.env.GITHUB_API_URL?.replace(/\/$/, "") || "https://api.github.com";
-
-export class GitHubError extends Error {
-  constructor(
-    message: string,
-    readonly status: number,
-  ) {
-    super(message);
-    this.name = "GitHubError";
-  }
-}
+const API = process.env.GITHUB_API_URL?.replace(/\/$/, "") || http.DEFAULT_API;
 
 export class MissingTokenError extends Error {
   constructor() {
-    super("No GitHub token found. Set GITHUB_TOKEN or run `gh auth login`.");
+    super(
+      oauthEnabled()
+        ? "Not signed in to GitHub."
+        : "No GitHub token found. Set GITHUB_TOKEN or run `gh auth login`.",
+    );
     this.name = "MissingTokenError";
   }
 }
 
-let tokenPromise: Promise<string> | undefined;
-
-/** GITHUB_TOKEN wins; otherwise borrow the GitHub CLI's token. Never sent to the client. */
-export function getToken(): Promise<string> {
-  tokenPromise ??= (async () => {
-    const fromEnv = process.env.GITHUB_TOKEN?.trim();
-    if (fromEnv) return fromEnv;
-    try {
-      const { stdout } = await promisify(execFile)("gh", ["auth", "token"], { timeout: 5_000 });
-      const token = stdout.trim();
-      if (token) return token;
-    } catch {
-      // gh missing or not logged in
-    }
-    throw new MissingTokenError();
-  })();
-  // Don't memoize failure, so logging in later works without a restart.
-  tokenPromise.catch(() => (tokenPromise = undefined));
-  return tokenPromise;
+/** Deployed: tokens come from the GitHub App's OAuth flow, held by the Hub Durable Object. */
+export function oauthEnabled(): boolean {
+  return Boolean(process.env.GITHUB_CLIENT_ID);
 }
 
-async function headers(): Promise<HeadersInit> {
-  return {
-    Authorization: `Bearer ${await getToken()}`,
-    Accept: "application/vnd.github+json",
-    "X-GitHub-Api-Version": "2022-11-28",
-    // Required by GitHub; runtimes like Workers don't add one.
-    "User-Agent": "github-triage",
-  };
-}
+// The value, not a promise: an in-flight promise shared across requests can hang on Workers.
+let localToken: string | undefined;
 
-export async function rest<T>(path: string): Promise<T> {
-  const res = await fetch(`${API}${path}`, { headers: await headers(), cache: "no-store" });
-  if (!res.ok) {
-    const body = (await res.json().catch(() => ({}))) as { message?: string };
-    throw new GitHubError(body.message ?? res.statusText, res.status);
+/** Local mode: GITHUB_TOKEN wins, else borrow the GitHub CLI's token. Never sent to the client. */
+async function getLocalToken(): Promise<string> {
+  const fromEnv = process.env.GITHUB_TOKEN?.trim();
+  if (fromEnv) return fromEnv;
+  if (localToken) return localToken;
+  try {
+    // Lazy: child_process doesn't exist on Workers, and this path never runs there.
+    const [{ execFile }, { promisify }] = await Promise.all([import("node:child_process"), import("node:util")]);
+    const { stdout } = await promisify(execFile)("gh", ["auth", "token"], { timeout: 5_000 });
+    // Failures aren't memoized, so logging in later works without a restart.
+    localToken = stdout.trim() || undefined;
+  } catch {
+    // gh missing or not logged in
   }
-  return res.json() as Promise<T>;
+  if (!localToken) throw new MissingTokenError();
+  return localToken;
 }
 
-export async function graphql<T>(query: string, variables: Record<string, unknown>): Promise<T> {
-  const res = await fetch(`${API}/graphql`, {
-    method: "POST",
-    headers: await headers(),
-    body: JSON.stringify({ query, variables }),
-    cache: "no-store",
-  });
-  const body = (await res.json().catch(() => ({}))) as {
-    data?: T;
-    errors?: { message: string }[];
-    message?: string;
-  };
-  if (!res.ok) throw new GitHubError(body.message ?? res.statusText, res.status);
-  if (body.errors?.length) throw new GitHubError(body.errors.map((e) => e.message).join("; "), 200);
-  return body.data as T;
+/** OAuth mode: the Hub owns the tokens and serializes refreshes (GitHub refresh tokens are single-use). */
+async function getHubToken(force: boolean): Promise<string> {
+  const { hub } = await import("@/edge/binding");
+  const token = await (await hub()).getToken(force);
+  if (!token) throw new MissingTokenError();
+  return token;
 }
 
-/** Run tasks with bounded concurrency so a big account doesn't trip secondary rate limits. */
-export async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
-  const out = new Array<R>(items.length);
-  let next = 0;
-  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
-    while (next < items.length) {
-      const i = next++;
-      out[i] = await fn(items[i]);
-    }
-  });
-  await Promise.all(workers);
-  return out;
+export async function withToken<T>(fn: (auth: http.GitHubAuth) => Promise<T>): Promise<T> {
+  if (!oauthEnabled()) return fn({ token: await getLocalToken(), api: API });
+  try {
+    return await fn({ token: await getHubToken(false), api: API });
+  } catch (err) {
+    // A token revoked or expired early: refresh once, then give up.
+    if (!(err instanceof GitHubError && err.status === 401)) throw err;
+    return fn({ token: await getHubToken(true), api: API });
+  }
+}
+
+export function rest<T>(path: string): Promise<T> {
+  return withToken((auth) => http.rest<T>(auth, path));
+}
+
+export function graphql<T>(query: string, variables: Record<string, unknown>): Promise<T> {
+  return withToken((auth) => http.graphql<T>(auth, query, variables));
 }

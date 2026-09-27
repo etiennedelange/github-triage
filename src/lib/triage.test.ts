@@ -4,8 +4,10 @@ import {
   codeScanningAlert,
   countBySeverity,
   dependabotAlert,
+  issueNode,
   isStale,
   prNextStep,
+  sectionsFor,
   pullRequestNode,
   relativeAge,
   secretScanningAlert,
@@ -22,16 +24,23 @@ function pr(overrides: Partial<{
   checks: "SUCCESS" | "FAILURE" | "ERROR" | "PENDING" | "EXPECTED" | null;
   updatedAt: string;
   number: number;
+  author: string;
+  repo: string;
+  state: "OPEN" | "CLOSED" | "MERGED";
+  archived: boolean;
+  reviewers: ({ login: string } | { slug: string; organization: { login: string } } | null)[];
 }> = {}): PullRequest {
   return pullRequestNode.parse({
     __typename: "PullRequest",
     number: overrides.number ?? 1,
     title: "t",
-    url: `https://github.com/o/r/pull/${overrides.number ?? 1}`,
+    url: `https://github.com/${overrides.repo ?? "o/r"}/pull/${overrides.number ?? 1}`,
     createdAt: "2026-09-01T00:00:00Z",
     updatedAt: overrides.updatedAt ?? "2026-09-20T00:00:00Z",
-    author: null,
-    repository: { nameWithOwner: "o/r" },
+    state: overrides.state ?? "OPEN",
+    author: overrides.author ? { login: overrides.author } : null,
+    repository: { nameWithOwner: overrides.repo ?? "o/r", isArchived: overrides.archived ?? false },
+    reviewRequests: { nodes: (overrides.reviewers ?? []).map((requestedReviewer) => ({ requestedReviewer })) },
     labels: { nodes: [] },
     comments: { totalCount: 0 },
     isDraft: overrides.isDraft ?? false,
@@ -55,6 +64,54 @@ describe("pullRequestNode", () => {
 
   it("treats a PR with no commits/rollup as having no checks", () => {
     expect(pr({ checks: null }).checks).toBe("none");
+  });
+});
+
+function issue(o: { assignees?: string[]; repo?: string; state?: "OPEN" | "CLOSED" } = {}) {
+  return issueNode.parse({
+    __typename: "Issue",
+    number: 9,
+    title: "t",
+    url: "https://github.com/x/y/issues/9",
+    createdAt: "2026-09-01T00:00:00Z",
+    updatedAt: "2026-09-20T00:00:00Z",
+    state: o.state ?? "OPEN",
+    author: { login: "someone" },
+    repository: { nameWithOwner: o.repo ?? "me/app", isArchived: false },
+    labels: { nodes: [] },
+    comments: { totalCount: 0 },
+    assignees: { nodes: (o.assignees ?? []).map((login) => ({ login })) },
+  });
+}
+
+describe("sectionsFor", () => {
+  const ctx = { viewer: "Me", owners: ["me", "acme"], teams: ["acme/web"] };
+
+  it("files PRs like the inbox searches do", () => {
+    // author:@me, on any repo
+    expect(sectionsFor(pr({ author: "me", repo: "elsewhere/lib" }), ctx)).toEqual(["mine"]);
+    // review-requested:@me, directly or through a team, on any repo
+    expect(sectionsFor(pr({ author: "bob", repo: "elsewhere/lib", reviewers: [{ login: "ME" }] }), ctx)).toEqual(["review"]);
+    expect(sectionsFor(pr({ author: "bob", repo: "elsewhere/lib", reviewers: [{ slug: "web", organization: { login: "acme" } }] }), ctx)).toEqual(["review"]);
+    // user:<owners> -author:@me, minus anything already in review
+    expect(sectionsFor(pr({ author: "bob", repo: "acme/api" }), ctx)).toEqual(["incoming"]);
+    expect(sectionsFor(pr({ author: "bob", repo: "acme/api", reviewers: [{ login: "me" }] }), ctx)).toEqual(["review"]);
+    // someone else's PR on someone else's repo
+    expect(sectionsFor(pr({ author: "bob", repo: "elsewhere/lib", reviewers: [null, { login: "carol" }] }), ctx)).toEqual([]);
+  });
+
+  it("drops closed, merged and archived items from every section", () => {
+    expect(sectionsFor(pr({ author: "me", state: "MERGED" }), ctx)).toEqual([]);
+    expect(sectionsFor(pr({ author: "me", state: "CLOSED" }), ctx)).toEqual([]);
+    expect(sectionsFor(pr({ author: "me", archived: true }), ctx)).toEqual([]);
+    expect(sectionsFor(issue({ assignees: ["me"], state: "CLOSED" }), ctx)).toEqual([]);
+  });
+
+  it("files issues as assigned or untriaged", () => {
+    expect(sectionsFor(issue({ assignees: ["me"], repo: "elsewhere/lib" }), ctx)).toEqual(["assigned"]);
+    expect(sectionsFor(issue({ assignees: [], repo: "acme/api" }), ctx)).toEqual(["untriaged"]);
+    expect(sectionsFor(issue({ assignees: [], repo: "elsewhere/lib" }), ctx)).toEqual([]);
+    expect(sectionsFor(issue({ assignees: ["bob"], repo: "me/app" }), ctx)).toEqual([]);
   });
 });
 

@@ -1,0 +1,7 @@
+# Copy to .dev.vars for `pnpm preview`. Use a separate dev GitHub App whose callback is
+# http://localhost:8787/auth/callback. See README "Deploying to Cloudflare".
+GITHUB_CLIENT_ID=
+GITHUB_CLIENT_SECRET=
+GITHUB_WEBHOOK_SECRET=
+SESSION_SECRET=
+ALLOWED_LOGINS=
