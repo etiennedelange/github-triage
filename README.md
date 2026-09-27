@@ -18,39 +18,38 @@ The app is **read-only**: it never writes to GitHub.
 ## Running it
 
 ```sh
-gh auth login -s security_events   # or put GITHUB_TOKEN in .env.local, see .env.example
+cp .dev.vars.example .dev.vars     # then set GITHUB_TOKEN, e.g. from `gh auth token`
 pnpm install
-pnpm dev                            # http://localhost:3000
+pnpm dev                           # http://localhost:5173
 ```
 
-The token is used server-side only. Don't expose `pnpm dev` beyond your machine: anyone who can load the page sees what your token can see. To host it, deploy to Cloudflare (below), which adds GitHub sign-in.
+`pnpm dev` runs the real Worker and Durable Object locally (workerd, via `@cloudflare/vite-plugin`), so what you test is what deploys. Without a GitHub App configured, the app runs in **local mode**: it uses your token, skips sign-in, and refuses any host other than localhost. The token stays server-side. To host it, deploy to Cloudflare (below), which adds GitHub sign-in.
 
 ### Security alert coverage
 
 Security alerts are fetched per repo (3 calls each, up to `TRIAGE_MAX_REPOS`). When a scanner has no data for a repo, the panel footer says whether it's turned off or whether the token lacks permission (HTTP 403), so an empty list is never a false all-clear. The `gh` CLI's default token has no `security_events` scope; add it with `gh auth refresh -s security_events`.
 
-Locally this fan-out runs live, in one request. Deployed, it doesn't: see [Security scans](#security-scans) below.
+The scan runs in the background in small batches, never inside a page request: see [Security scans](#security-scans) below.
 
 ### Caching
 
-GitHub data is cached with Next.js `unstable_cache`: the PR/issue inbox (a single GraphQL request) for about a minute, and (locally) security scans for about 15 minutes. **Refresh** clears the inbox; deployed, the security scan isn't a cache to clear (see below).
-
-Cache Components (`cacheComponents`, `use cache`) is deliberately **off**: on production Cloudflare Workers it hangs page streaming ([opennextjs/opennextjs-cloudflare#1225](https://github.com/opennextjs/opennextjs-cloudflare/issues/1225)). Worth re-enabling once that's fixed upstream.
+The Hub Durable Object is the only cache. It keeps the PR/issue inbox (a single GraphQL request) for about a minute and the last security scan for 15 minutes. **Refresh** refetches the inbox; webhook events also expire it, so the next page load is fresh. In the browser, TanStack Query shares each response across components.
 
 ## Deploying to Cloudflare
 
-Deployed, the app runs on Cloudflare Workers via [OpenNext](https://opennext.js.org/cloudflare). You sign in with GitHub, and changes on GitHub are pushed to open tabs as they happen.
+Deployed, the app is one Cloudflare Worker. You sign in with GitHub, and changes on GitHub are pushed to open tabs as they happen.
 
 ### How it fits together
 
-`worker.ts` is the Worker entry. It handles these paths before Next:
+The browser app is a static Vite + React SPA. The Worker (`src/worker/index.ts`, Hono) never renders HTML; it handles:
 
 | Path | What it does |
 | --- | --- |
 | `/auth/login`, `/auth/callback`, `/auth/logout` | GitHub App OAuth. Only logins in `ALLOWED_LOGINS` get a session (a signed, HttpOnly cookie). Tokens never reach the browser. |
 | `/api/github/webhook` | GitHub App webhooks, verified with `X-Hub-Signature-256`. The only path that doesn't need a session. |
+| `/api/inbox`, `/api/security`, `/api/rate-limits`, `/api/refresh`, `/api/session` | JSON for the app, each a single call to the Hub. Typed end to end with Hono RPC (`src/client/api.ts`). |
 | `/api/live` | The dashboard's WebSocket. |
-| everything else | The Next app, behind the session check. |
+| everything else | The SPA's static files, behind the session check. |
 
 The **Hub** Durable Object (`src/edge/hub.ts`) holds your OAuth tokens and refreshes them. Refresh tokens are single-use, so there's exactly one place that refreshes. It also holds the open tabs' WebSockets, which hibernate so idle tabs cost nothing, and it turns changes into small updates:
 
@@ -58,7 +57,7 @@ The **Hub** Durable Object (`src/edge/hub.ts`) holds your OAuth tokens and refre
 - Security alert webhooks carry the alert itself, so they're pushed with no API call.
 - With no tab open, the Hub does no work. It only notes that something changed, and the next tab to open resyncs once.
 
-The browser overlays these updates on the server-rendered snapshot. A row that arrives or changes glows once. If a tab could have missed something (it was offline, or it was rendered from an older cached snapshot), it runs **Refresh** once.
+The browser overlays these updates on the snapshot it fetched. A row that arrives or changes glows once. If a tab could have missed something (it was offline, or it was rendered from an older cached snapshot), it runs **Refresh** once.
 
 ### Setup
 
@@ -68,21 +67,16 @@ The browser overlays these updates on the server-rendered snapshot. A row that a
    - Repository permissions, all **read-only**: Metadata, Pull requests, Issues, Checks, Commit statuses, Contents, Dependabot alerts, Code scanning alerts, Secret scanning alerts. Organization permission: Members (read), so team review requests count.
    - Subscribe to events: Pull request, Pull request review, Issues, Issue comment, Check suite, Push, Dependabot alert, Code scanning alert, Secret scanning alert. Installation events are sent to every App anyway.
    - Generate a client secret, then **install** the App on your account and on any orgs in `TRIAGE_OWNERS`.
-2. **Create the cache resources** and put the D1 id in `wrangler.jsonc`:
-   ```sh
-   pnpm wrangler r2 bucket create github-triage-opennext-cache
-   pnpm wrangler d1 create github-triage-tags
-   ```
-3. **Set the configuration.** Put `ALLOWED_LOGINS` (your login) and optionally `TRIAGE_OWNERS` in `wrangler.jsonc` → `vars`. Then add the secrets:
+2. **Set the configuration.** Put `ALLOWED_LOGINS` (your login) and optionally `TRIAGE_OWNERS` in `wrangler.jsonc` → `vars`. Then add the secrets:
    ```sh
    pnpm wrangler secret put GITHUB_CLIENT_ID
    pnpm wrangler secret put GITHUB_CLIENT_SECRET
    pnpm wrangler secret put GITHUB_WEBHOOK_SECRET
    pnpm wrangler secret put SESSION_SECRET        # e.g. openssl rand -hex 32
    ```
-4. `pnpm run deploy` (plain `pnpm deploy` is a pnpm built-in)
+3. `pnpm run deploy` (plain `pnpm deploy` is a pnpm built-in)
 
-To try the built Worker locally, copy `.dev.vars.example` to `.dev.vars` and run `pnpm preview` (use a second GitHub App whose callback is `http://localhost:8787/auth/callback`). After changing bindings in `wrangler.jsonc`, run `pnpm cf-typegen`.
+To try sign-in locally, fill in the OAuth section of `.dev.vars` with a second GitHub App whose callback is `http://localhost:5173/auth/callback`. After changing bindings in `wrangler.jsonc`, run `pnpm cf-typegen`.
 
 ### What sign-in changes
 
@@ -91,7 +85,7 @@ To try the built Worker locally, copy `.dev.vars.example` to `.dev.vars` and run
 
 ### Security scans
 
-A scan is 3 GitHub calls per repo, which can be well over Cloudflare Workers' per-invocation subrequest limit (a page-render Worker invocation would trip it directly). So deployed, the Hub Durable Object owns scanning instead of the page request: it runs a bounded batch of repo/scanner calls per alarm tick (`src/edge/hub.ts`), checkpointing progress in its own storage and resuming on the next tick until a full pass completes, then stores the result. The dashboard just reads whatever the Hub last finished. A page load only kicks off a new scan when the stored one is missing or older than 15 minutes; while a scan is running (typically only ever on first deploy) the panel shows "Scanning" instead of an error.
+A scan is 3 GitHub calls per repo, which can be well over Cloudflare Workers' per-invocation subrequest limit. So the Hub Durable Object owns scanning instead of any request: it runs a bounded batch of repo/scanner calls per alarm tick (`src/edge/hub.ts`), checkpointing progress in its own storage and resuming on the next tick until a full pass completes, then stores the result. The dashboard just reads whatever the Hub last finished. A page load only kicks off a new scan when the stored one is missing or older than 15 minutes; while a scan is running (typically only ever on first deploy) the panel shows "Scanning" instead of an error.
 
 ### Realtime coverage
 
@@ -106,14 +100,14 @@ A scan is 3 GitHub calls per repo, which can be well over Cloudflare Workers' pe
 Open the repository in its dev container (VS Code: **Dev Containers: Clone Repository in Container Volume**). The container provides Node.js 24, pnpm via Corepack, the GitHub CLI and Claude Code. Claude's configuration lives in a per-container volume, so run `claude` once to sign in and `gh auth login` to authenticate the GitHub CLI.
 
 ```sh
-pnpm test        # Vitest: triage rules, alert normalization
+pnpm test        # Vitest: triage rules, alert normalization, auth, webhooks
 pnpm typecheck
 pnpm lint
 pnpm build
 ```
 
-Stack: Next.js 16 (App Router) on Cloudflare Workers via OpenNext, a Durable Object for tokens and live updates, TypeScript, Tailwind CSS 4, shadcn/ui (radix-vega), Zod at the GitHub API boundary, Lucide, next-themes.
+Stack: Vite + React 19 SPA, Hono on Cloudflare Workers, a Durable Object as the store (tokens, cache, live updates), TanStack Query, TypeScript, Tailwind CSS 4, shadcn/ui (radix-vega), Zod at the GitHub API boundary, Lucide, Motion, next-themes (a plain React library, despite the name).
 
 `GITHUB_API_URL` points the app at a different API root (GraphQL at `${GITHUB_API_URL}/graphql`), which is handy for testing against a mock server.
 
-Layout: `src/lib/github/` does the fetching (`http.ts` is runtime-agnostic HTTP, `client.ts` resolves the token, `data.ts` holds cached queries). `src/edge/` is the Cloudflare side: auth, webhooks, the Hub Durable Object and the live protocol. `src/lib/triage.ts` holds the pure rules and schemas. `src/components/triage/` is the UI.
+Layout: `src/client/` is the browser entry (API client, URL state). `src/worker/index.ts` is the Worker. `src/edge/` is the Cloudflare side: auth, webhooks, the Hub Durable Object and the live protocol. `src/lib/github/` does the GitHub reads (inbox, security, HTTP). `src/lib/triage.ts` holds the pure rules and schemas. `src/components/triage/` is the UI.

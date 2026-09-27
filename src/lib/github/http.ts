@@ -1,5 +1,4 @@
-// Runtime-agnostic GitHub HTTP: no `server-only`, no env reads, so both the Next server
-// and the Hub Durable Object (outside Next) can use it. Callers pass the token.
+// GitHub HTTP with no env reads: callers (the Hub Durable Object) pass the token.
 
 export const DEFAULT_API = "https://api.github.com";
 

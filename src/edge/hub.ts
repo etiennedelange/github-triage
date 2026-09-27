@@ -1,7 +1,9 @@
 import { DurableObject } from "cloudflare:workers";
 
 import { GitHubError, mapLimit, type GitHubAuth } from "@/lib/github/http";
-import { listInstalledRepos, scanOne, SCANNERS, type SecurityReport } from "@/lib/github/security";
+import { fetchInbox, fetchRateLimits, fetchViewerLogin, type Inbox, type RateLimits } from "@/lib/github/inbox";
+import { asResult, MissingTokenError, ScanPendingError, type Result } from "@/lib/github/result";
+import { listInstalledRepos, listOwnedRepos, scanOne, SCANNERS, type SecurityReport } from "@/lib/github/security";
 import { sectionsFor, type AlertSource, type Issue, type PullRequest, type ScannerStatus, type SectionContext } from "@/lib/triage";
 
 import { splitList, type EdgeEnv } from "./env";
@@ -19,6 +21,8 @@ const POLL_MS = 120_000;
 /** Search indexing lags; overlap windows so nothing slips between polls. Duplicates are harmless. */
 const POLL_OVERLAP_MS = 5 * 60_000;
 const TEAMS_TTL_MS = 24 * 3_600_000;
+/** The stored inbox is served for this long; Refresh and webhook events end it early. */
+const INBOX_MAX_AGE_MS = 60_000;
 const DELIVERIES_KEPT = 200;
 
 /** A security scan is redone once the last one is this old. */
@@ -70,11 +74,7 @@ export class Hub extends DurableObject<EdgeEnv> {
     );
   }
 
-  // ---------- RPC: tokens ----------
-
-  getToken(force = false): Promise<string | null> {
-    return this.tokens.get(force);
-  }
+  // ---------- RPC: tokens (the Worker's OAuth handlers store them; only the Hub reads them) ----------
 
   async saveTokens(tokens: StoredTokens): Promise<void> {
     await this.ctx.storage.put("tokens", tokens);
@@ -82,7 +82,7 @@ export class Hub extends DurableObject<EdgeEnv> {
   }
 
   async signOut(): Promise<void> {
-    await this.ctx.storage.delete(["tokens", "teams"]);
+    await this.ctx.storage.delete(["tokens", "teams", "inbox"]);
     for (const ws of this.ctx.getWebSockets()) ws.close(4001, "Signed out");
   }
 
@@ -97,6 +97,8 @@ export class Hub extends DurableObject<EdgeEnv> {
     if (!changes.length) return;
     const at = Date.now();
     await this.ctx.storage.put("lastEventAt", at);
+    // The stored inbox may now be out of date: the next page load refetches it.
+    await this.ctx.storage.delete("inbox");
     // Nobody watching: a tab that opens later sees lastEventAt and resyncs once.
     if (!this.ctx.getWebSockets().length) return;
 
@@ -115,20 +117,47 @@ export class Hub extends DurableObject<EdgeEnv> {
     if (keys.length) await this.enqueue(keys, DEBOUNCE_MS);
   }
 
-  // ---------- RPC: security scan ----------
+  // ---------- RPC: dashboard data (the Hub is the app's only cache) ----------
+
+  /**
+   * The inbox, from storage while it's under a minute old; `force` (Refresh) refetches.
+   * Concurrent callers may each refetch: sharing one in-flight promise across requests is
+   * exactly what hangs on Workers, and a duplicate GraphQL call is cheap.
+   */
+  getInbox(force = false): Promise<Result<Inbox>> {
+    return asResult(async () => {
+      const cached = await this.ctx.storage.get<Inbox>("inbox");
+      if (!force && cached && Date.now() - Date.parse(cached.fetchedAt) < INBOX_MAX_AGE_MS) return cached;
+      const viewer = await this.viewerLogin();
+      const inbox = await this.withAuth((auth) => fetchInbox(auth, [viewer, ...splitList(this.env.TRIAGE_OWNERS)]));
+      await this.ctx.storage.put("inbox", inbox);
+      return inbox;
+    });
+  }
+
+  /** Live, uncached: `/rate_limit` costs nothing against either budget. */
+  getRateLimits(): Promise<Result<RateLimits>> {
+    return asResult(() => this.withAuth(fetchRateLimits));
+  }
 
   /** Latest completed scan, kicking off a new one in the background if there isn't a fresh enough one. */
-  async getSecurityReport(): Promise<SecurityReport | undefined> {
-    const report = await this.ctx.storage.get<SecurityReport>("securityReport");
-    const job = await this.ctx.storage.get<SecurityJob>("securityJob");
-    const stale = !report || Date.now() - Date.parse(report.scannedAt) > SECURITY_SCAN_INTERVAL_MS;
-    if (stale && !job) await this.startSecurityScan();
-    return report;
+  getSecurity(): Promise<Result<SecurityReport>> {
+    return asResult(async () => {
+      const report = await this.ctx.storage.get<SecurityReport>("securityReport");
+      const job = await this.ctx.storage.get<SecurityJob>("securityJob");
+      const stale = !report || Date.now() - Date.parse(report.scannedAt) > SECURITY_SCAN_INTERVAL_MS;
+      if (stale && !job) await this.startSecurityScan();
+      if (!report) throw new ScanPendingError();
+      return report;
+    });
   }
 
   private async startSecurityScan(): Promise<void> {
     const max = Number(this.env.TRIAGE_MAX_REPOS) || 50;
-    const repos = await this.withAuth((auth) => listInstalledRepos(auth, max)).catch(() => [] as string[]);
+    const owners = [await this.viewerLogin(), ...splitList(this.env.TRIAGE_OWNERS)];
+    const repos = await this.withAuth((auth) => (this.localMode ? listOwnedRepos(auth, owners, max) : listInstalledRepos(auth, max))).catch(
+      () => [] as string[],
+    );
     if (!repos.length) return;
     const job: SecurityJob = { repos, sources: Object.keys(SCANNERS) as AlertSource[], index: 0, alerts: [], repoScanners: {}, truncated: [] };
     await this.ctx.storage.put("securityJob", job);
@@ -248,7 +277,7 @@ export class Hub extends DurableObject<EdgeEnv> {
       try {
         await this.continueSecurityScan(job);
       } catch (err) {
-        // Token gone or GitHub down: drop the checkpoint; the next getSecurityReport() retries.
+        // Token gone or GitHub down: drop the checkpoint; the next getSecurity() retries.
         console.error("hub: security scan failed", err);
         await this.ctx.storage.delete("securityJob");
       }
@@ -308,10 +337,20 @@ export class Hub extends DurableObject<EdgeEnv> {
 
   // ---------- GitHub ----------
 
+  /** No GitHub App configured: local development with a personal token from `.dev.vars`. */
+  private get localMode(): boolean {
+    return !this.env.GITHUB_CLIENT_ID;
+  }
+
   private async withAuth<T>(fn: (auth: GitHubAuth) => Promise<T>): Promise<T> {
     const api = this.env.GITHUB_API_URL || undefined;
+    if (this.localMode) {
+      const token = this.env.GITHUB_TOKEN?.trim();
+      if (!token) throw new MissingTokenError("No GitHub token. Put GITHUB_TOKEN in .dev.vars (see .dev.vars.example).");
+      return fn({ token, api });
+    }
     const token = await this.tokens.get();
-    if (!token) throw new Error("Not signed in");
+    if (!token) throw new MissingTokenError();
     try {
       return await fn({ token, api });
     } catch (err) {
@@ -322,9 +361,23 @@ export class Hub extends DurableObject<EdgeEnv> {
     }
   }
 
+  /** Signed-in login (OAuth), or the personal token's owner (local mode, looked up once). */
+  private async viewerLogin(): Promise<string> {
+    if (!this.localMode) {
+      const tokens = await this.ctx.storage.get<StoredTokens>("tokens");
+      if (!tokens) throw new MissingTokenError();
+      return tokens.login;
+    }
+    let login = await this.ctx.storage.get<string>("localLogin");
+    if (!login) {
+      login = await this.withAuth(fetchViewerLogin);
+      await this.ctx.storage.put("localLogin", login);
+    }
+    return login;
+  }
+
   private async sectionContext(): Promise<SectionContext> {
-    const tokens = await this.ctx.storage.get<StoredTokens>("tokens");
-    const viewer = tokens?.login ?? "";
+    const viewer = await this.viewerLogin();
     let teams = await this.ctx.storage.get<{ list: string[]; at: number }>("teams");
     if (!teams || Date.now() - teams.at > TEAMS_TTL_MS) {
       const list = await this.withAuth((auth) => fetchTeams(auth, viewer)).catch(() => teams?.list ?? []);

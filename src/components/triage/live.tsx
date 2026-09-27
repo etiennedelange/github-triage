@@ -1,8 +1,6 @@
-"use client";
+import { useEffect, useSyncExternalStore } from "react";
 
-import { startTransition, useEffect, useSyncExternalStore } from "react";
-
-import { refresh } from "@/app/actions";
+import { refreshAll } from "@/client/api";
 import { serverEnvelope, type ServerMessage } from "@/edge/protocol";
 import type { AlertPatch, ItemPatch } from "@/lib/live";
 import { cn } from "@/lib/utils";
@@ -10,8 +8,8 @@ import { cn } from "@/lib/utils";
 /*
  * Live updates from the Hub Durable Object over /api/live. One socket per tab, held in
  * this module so every panel reads the same patches. Patches are keyed by URL and only
- * overlay the server snapshot; when anything might have been missed (a gap in `seq`, or
- * events while no tab was open), the tab resyncs by running the Refresh action once.
+ * overlay the fetched snapshot; when anything might have been missed (a gap in `seq`, or
+ * events while no tab was open), the tab resyncs by running Refresh once.
  */
 
 type Status = "off" | "connecting" | "live" | "offline";
@@ -109,13 +107,9 @@ function receive(msg: ServerMessage) {
 function resync() {
   if (resyncing) return;
   resyncing = true;
-  startTransition(async () => {
-    try {
-      await refresh();
-    } finally {
-      resyncing = false;
-    }
-  });
+  void refreshAll()
+    .catch(() => {}) // offline: the next reconnect asks again
+    .finally(() => (resyncing = false));
 }
 
 /**

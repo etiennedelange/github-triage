@@ -12,6 +12,8 @@ export type EdgeEnv = Omit<CloudflareEnv, "HUB"> & {
   TRIAGE_OWNERS?: string;
   TRIAGE_MAX_REPOS?: string;
   GITHUB_API_URL?: string;
+  /** Local development only, when no GitHub App is configured (`.dev.vars`). */
+  GITHUB_TOKEN?: string;
 };
 
 /** Single user, single Hub. */

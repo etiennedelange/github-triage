@@ -1,13 +1,12 @@
 import { ShieldCheck } from "lucide-react";
-import { Suspense } from "react";
 
 import { ThemeToggle } from "@/components/theme-toggle";
-import { Dashboard, DashboardSkeleton } from "@/components/triage/dashboard";
+import { Dashboard } from "@/components/triage/dashboard";
 import { LiveStatus } from "@/components/triage/live";
 import { FxPicker, RefreshButton } from "@/components/triage/refresh-button";
 import { RefreshFx } from "@/components/triage/refresh-fx";
 
-export default function Page({ searchParams }: PageProps<"/">) {
+export function App() {
   return (
     <RefreshFx>
     <div className="mx-auto max-w-[1440px] space-y-3 px-4 py-4">
@@ -22,9 +21,7 @@ export default function Page({ searchParams }: PageProps<"/">) {
         </div>
       </header>
       <main>
-        <Suspense fallback={<DashboardSkeleton />}>
-          <Dashboard searchParams={searchParams} />
-        </Suspense>
+        <Dashboard />
       </main>
     </div>
     </RefreshFx>

@@ -3,10 +3,8 @@ node_modules/
 !.env.example
 .DS_Store
 
-# Next.js
-/.next/
-/out/
-next-env.d.ts
+# Build output
+/dist/
 *.tsbuildinfo
 
 # Debug logs
@@ -14,7 +12,6 @@ npm-debug.log*
 pnpm-debug.log*
 
 # Cloudflare
-/.open-next/
 /.wrangler/
 .dev.vars*
 !.dev.vars.example

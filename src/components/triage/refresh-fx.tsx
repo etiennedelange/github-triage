@@ -1,5 +1,3 @@
-"use client";
-
 import { AnimatePresence, animate, motion } from "motion/react";
 import {
   createContext,
@@ -15,7 +13,7 @@ import {
   type ReactNode,
 } from "react";
 
-import { refresh } from "@/app/actions";
+import { refreshAll } from "@/client/api";
 
 /*
  * Refresh animations. A refresh moves through phases:
@@ -101,7 +99,7 @@ export function RefreshFx({ children }: { children: ReactNode }) {
     setOrigin({ x: r.left + r.width / 2, y: r.top + r.height / 2 });
     root.current?.querySelectorAll<HTMLElement>("[data-fx-panel]").forEach((p, i) => p.style.setProperty("--fx-i", `${i}`));
     start(async () => {
-      await refresh();
+      await refreshAll().catch(() => {}); // failures show in the panels; the animation still settles
       // Commits with the fresh data, so the landing starts exactly as it appears.
       startTransition(() => setLanding((n) => n + 1));
     });

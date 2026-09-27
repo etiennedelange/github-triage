@@ -1,19 +1,11 @@
 import { CircleHelp, LogOut, ShieldAlert, TriangleAlert, X } from "lucide-react";
-import Link from "next/link";
-import { Suspense } from "react";
 
+import { useInbox, useRateLimits, useSecurity, useSession } from "@/client/api";
+import { AppLink, useRepoFilter } from "@/client/url";
 import { Skeleton } from "@/components/ui/skeleton";
-import { oauthEnabled } from "@/lib/github/client";
-import {
-  getInbox,
-  getRateLimits,
-  getSecurity,
-  type Failure,
-  type Inbox,
-  type RateLimits,
-  type Result,
-  type SecurityReport,
-} from "@/lib/github/data";
+import type { Inbox, RateLimits } from "@/lib/github/inbox";
+import type { Failure } from "@/lib/github/result";
+import type { SecurityReport } from "@/lib/github/security";
 import { relativeAge, type AlertSource } from "@/lib/triage";
 import { cn } from "@/lib/utils";
 
@@ -21,79 +13,50 @@ import { LiveInbox, LiveSecurityPanel, LiveSecurityStat, Stat } from "./live-inb
 import { Panel, PanelSkeleton } from "./panel";
 import { SOURCE, TONE } from "./rows";
 
-export async function Dashboard({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
-  const { repo: raw } = await searchParams;
-  const repo = typeof raw === "string" && /^[\w.-]+\/[\w.-]+$/.test(raw) ? raw : undefined;
+/**
+ * Three independent queries, so the fast inbox shows before the security report and the
+ * API budgets, the way the old Suspense boundaries streamed them.
+ */
+export function Dashboard() {
+  const repo = useRepoFilter();
+  const inbox = useInbox();
+  const session = useSession();
+  const oauth = session.data?.oauth ?? false;
 
-  // Start both now so the slow security fan-out runs in parallel with the inbox query.
-  const inbox = getInbox();
-  const security = getSecurity();
-  const limits = getRateLimits();
+  if (inbox.isPending) return <DashboardSkeleton />;
+  if (inbox.isError) return <ErrorCard error={{ kind: "unexpected", message: inbox.error.message }} oauth={oauth} />;
+  if (!inbox.data.ok) return <ErrorCard error={inbox.data.error} oauth={oauth} />;
+  const data = inbox.data.data;
 
-  return (
-    <Suspense fallback={<DashboardSkeleton />}>
-      <InboxView inbox={inbox} security={security} limits={limits} repo={repo} />
-    </Suspense>
-  );
-}
-
-type Pending<T> = Promise<Result<T>>;
-
-async function InboxView({
-  inbox: pending,
-  security,
-  limits,
-  repo,
-}: {
-  inbox: Pending<Inbox>;
-  security: Pending<SecurityReport>;
-  limits: Pending<RateLimits>;
-  repo?: string;
-}) {
-  const result = await pending;
-  if (!result.ok) return <ErrorCard error={result.error} />;
-  const inbox = result.data;
-
-  // Panels render client-side so live updates can overlay the snapshot fetched here.
+  // Panels overlay live updates on this snapshot.
   return (
     <LiveInbox
-      inbox={inbox}
+      inbox={data}
       repo={repo}
-      live={oauthEnabled()}
-      contextLine={<ContextLine inbox={inbox} limits={limits} repo={repo} />}
-      securityStat={
-        <Suspense fallback={<Stat href="#security" label="Security alerts" value="…" />}>
-          <SecurityStat security={security} repo={repo} />
-        </Suspense>
-      }
-      securityPanel={
-        <Suspense fallback={<PanelSkeleton rows={5} />}>
-          <SecurityPanel security={security} repo={repo} />
-        </Suspense>
-      }
+      live
+      contextLine={<ContextLine inbox={data} repo={repo} oauth={oauth} />}
+      securityStat={<SecurityStat repo={repo} />}
+      securityPanel={<SecurityPanel repo={repo} oauth={oauth} />}
     />
   );
 }
 
-function ContextLine({ inbox, limits, repo }: { inbox: Inbox; limits: Pending<RateLimits>; repo?: string }) {
+function ContextLine({ inbox, repo, oauth }: { inbox: Inbox; repo?: string; oauth: boolean }) {
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
       <span className="inline-flex items-center gap-1.5">
-        {/* eslint-disable-next-line @next/next/no-img-element -- tiny avatar, no need for the image optimizer */}
         <img src={inbox.viewer.avatarUrl} alt="" width={16} height={16} className="size-4 rounded-full" />
         <span className="font-medium text-foreground">@{inbox.viewer.login}</span>
       </span>
       {repo && (
-        <Link href="/" className="inline-flex items-center gap-1 rounded-md bg-muted px-1.5 py-0.5 font-mono text-foreground hover:bg-muted/70">
+        <AppLink href="/" className="inline-flex items-center gap-1 rounded-md bg-muted px-1.5 py-0.5 font-mono text-foreground hover:bg-muted/70">
           {repo} <X aria-label="Clear filter" className="size-3" />
-        </Link>
+        </AppLink>
       )}
-      {/* Last in the row, so nothing moves when it streams in. */}
-      <Suspense>
-        <ApiBudgets limits={limits} />
-      </Suspense>
-      {oauthEnabled() && (
-        // Handled by the Worker entry, outside Next: POST so a prefetch can't sign you out.
+      {/* Last in the row, so nothing moves when it loads. */}
+      <ApiBudgets />
+      {oauth && (
+        // A plain form post to the Worker: POST so a prefetch can't sign you out.
         <form action="/auth/logout" method="post" className="ml-auto">
           <button type="submit" className="inline-flex items-center gap-1 hover:text-foreground">
             <LogOut aria-hidden className="size-3" /> Sign out
@@ -104,9 +67,9 @@ function ContextLine({ inbox, limits, repo }: { inbox: Inbox; limits: Pending<Ra
   );
 }
 
-async function ApiBudgets({ limits }: { limits: Pending<RateLimits> }) {
-  const result = await limits;
-  if (!result.ok) return null;
+function ApiBudgets() {
+  const { data: result } = useRateLimits();
+  if (!result?.ok) return null;
   const { graphql, rest } = result.data;
   return (
     <span className="inline-flex items-center gap-x-2">
@@ -130,34 +93,35 @@ function Budget({ name, hint, remaining, limit, resetAt }: { name: string; hint:
 
 // ---------- Security ----------
 
-async function SecurityStat({ security, repo }: { security: Pending<SecurityReport>; repo?: string }) {
-  const result = await security;
-  if (!result.ok) {
-    return result.error.kind === "scanning" ? (
-      <Stat href="#security" label="Security alerts" value="…" sub="Scanning" />
-    ) : (
-      <Stat href="#security" label="Security alerts" value="!" sub="Couldn't load" tone="danger" />
-    );
-  }
-  return <LiveSecurityStat report={result.data} repo={repo} />;
+function SecurityStat({ repo }: { repo?: string }) {
+  const { data: result, isPending } = useSecurity();
+  if (isPending) return <Stat href="#security" label="Security alerts" value="…" />;
+  if (result?.ok) return <LiveSecurityStat report={result.data} repo={repo} />;
+  return result?.error.kind === "scanning" ? (
+    <Stat href="#security" label="Security alerts" value="…" sub="Scanning" />
+  ) : (
+    <Stat href="#security" label="Security alerts" value="!" sub="Couldn't load" tone="danger" />
+  );
 }
 
-async function SecurityPanel({ security, repo }: { security: Pending<SecurityReport>; repo?: string }) {
-  const result = await security;
-  if (!result.ok) {
+function SecurityPanel({ repo, oauth }: { repo?: string; oauth: boolean }) {
+  const { data: result, isError, error } = useSecurity();
+  if (!result && !isError) return <PanelSkeleton rows={5} />;
+  if (!result?.ok) {
+    const failure: Failure = result ? result.error : { kind: "unexpected", message: error?.message ?? "Request failed" };
     return (
       <Panel id="security" icon={ShieldAlert} title="Security alerts">
         <li className="p-3">
-          {result.error.kind === "scanning" ? (
-            <p className="text-sm text-muted-foreground">{result.error.message}</p>
+          {failure.kind === "scanning" ? (
+            <p className="text-sm text-muted-foreground">{failure.message}</p>
           ) : (
-            <ErrorCard error={result.error} compact />
+            <ErrorCard error={failure} compact oauth={oauth} />
           )}
         </li>
       </Panel>
     );
   }
-  const report = result.data;
+  const report: SecurityReport = result.data;
 
   const repos = report.repos.filter((r) => !repo || r.repo === repo);
   const sources = Object.keys(SOURCE) as AlertSource[];
@@ -189,7 +153,7 @@ async function SecurityPanel({ security, repo }: { security: Pending<SecurityRep
             <p className={cn("flex items-start gap-1 rounded-md px-1.5 py-1", TONE.warning)}>
               <TriangleAlert aria-hidden className="mt-px size-3 shrink-0" />
               <span>
-                Some scanners returned 403, so their results are missing from this list. If you use the gh CLI token, run{" "}
+                Some scanners returned 403, so their results are missing from this list. If you use a gh CLI token locally, run{" "}
                 <code className="font-mono">gh auth refresh -s security_events</code>. With a fine-grained token, grant read access to Dependabot alerts, code scanning alerts and secret scanning alerts.
               </span>
             </p>
@@ -204,10 +168,10 @@ async function SecurityPanel({ security, repo }: { security: Pending<SecurityRep
 
 // ---------- States ----------
 
-function ErrorCard({ error, compact }: { error: Failure; compact?: boolean }) {
+function ErrorCard({ error, compact, oauth }: { error: Failure; compact?: boolean; oauth: boolean }) {
   const noToken = error.kind === "no-token";
   const title = noToken ? "Connect GitHub" : error.status === 401 ? "GitHub rejected the token" : "Couldn't load from GitHub";
-  if (noToken && oauthEnabled()) {
+  if (noToken && oauth) {
     return (
       <div role="alert" className={cn("rounded-xl border bg-card", compact ? "p-3 text-sm" : "mx-auto max-w-xl p-6")}>
         <div className="flex items-center gap-2 font-semibold">
@@ -215,7 +179,7 @@ function ErrorCard({ error, compact }: { error: Failure; compact?: boolean }) {
           Sign in again
         </div>
         <p className="mt-2 text-sm text-muted-foreground">Your GitHub session ended (tokens expire after six months unused, or were revoked).</p>
-        {/* A plain link: /auth/* is handled by the Worker, outside Next's router. */}
+        {/* A plain link: /auth/* is handled by the Worker. */}
         <a href="/auth/login" className="mt-3 inline-flex h-8 items-center rounded-md bg-foreground px-3 text-sm font-medium text-background hover:bg-foreground/90">
           Sign in with GitHub
         </a>
@@ -230,16 +194,12 @@ function ErrorCard({ error, compact }: { error: Failure; compact?: boolean }) {
       </div>
       {noToken ? (
         <div className="mt-2 space-y-2 text-sm text-muted-foreground">
-          <p>The dashboard reads GitHub with your own token, server-side only. Pick one:</p>
-          <ul className="list-disc space-y-1 pl-5">
-            <li>
-              Run <code className="font-mono text-foreground">gh auth login</code> (add <code className="font-mono text-foreground">-s security_events</code> to include security alerts), or
-            </li>
-            <li>
-              Put a token in <code className="font-mono text-foreground">.env.local</code> as <code className="font-mono text-foreground">GITHUB_TOKEN=…</code> and restart.
-            </li>
-          </ul>
-          <p>Then press Refresh.</p>
+          <p>
+            Local development reads GitHub with your own token, server-side only. Put it in{" "}
+            <code className="font-mono text-foreground">.dev.vars</code> as <code className="font-mono text-foreground">GITHUB_TOKEN=…</code> (for
+            example <code className="font-mono text-foreground">gh auth token</code>, with <code className="font-mono text-foreground">security_events</code> for
+            security alerts) and restart <code className="font-mono text-foreground">pnpm dev</code>.
+          </p>
         </div>
       ) : (
         <p className="mt-2 font-mono text-xs break-words text-muted-foreground">{error.message}</p>

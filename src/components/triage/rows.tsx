@@ -10,7 +10,6 @@ import {
   MessageSquare,
   Package,
 } from "lucide-react";
-import Link from "next/link";
 import type { ReactNode } from "react";
 
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -26,6 +25,7 @@ import {
   type SecurityAlert,
   type Severity,
 } from "@/lib/triage";
+import { AppLink } from "@/client/url";
 import { cn } from "@/lib/utils";
 
 export const TONE = {
@@ -85,13 +85,13 @@ function Row({ icon, title, url, number, meta, trailing, live }: LiveProp & {
 
 function RepoLink({ repo }: { repo: string }) {
   return (
-    <Link
+    <AppLink
       href={`/?repo=${encodeURIComponent(repo)}`}
       className="max-w-48 truncate font-mono hover:text-foreground hover:underline"
       title={`Show only ${repo}`}
     >
       {repo}
-    </Link>
+    </AppLink>
   );
 }
 

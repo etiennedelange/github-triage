@@ -1,10 +1,8 @@
-"use client";
-
 import { CircleDot, Eye, GitPullRequest, GitPullRequestArrow, Inbox as InboxIcon, ShieldAlert } from "lucide-react";
-import Link from "next/link";
 import type { ReactNode } from "react";
 
-import type { Inbox, SecurityReport } from "@/lib/github/data";
+import type { Inbox } from "@/lib/github/inbox";
+import type { SecurityReport } from "@/lib/github/security";
 import { overlayAlerts, overlayItems } from "@/lib/live";
 import {
   countBySeverity,
@@ -17,6 +15,7 @@ import {
   type Issue,
   type PullRequest,
 } from "@/lib/triage";
+import { AppLink } from "@/client/url";
 import { cn } from "@/lib/utils";
 
 import { useLive, useLiveConnection } from "./live";
@@ -135,11 +134,11 @@ function RepoChips({ lists, active }: { lists: { repo: string }[][]; active?: st
   const chip = "inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs transition-colors hover:bg-muted";
   return (
     <nav aria-label="Filter by repository" className="-mx-4 flex gap-1.5 overflow-x-auto px-4 pb-1 sm:mx-0 sm:flex-wrap sm:px-0">
-      <Link href="/" aria-current={!active ? "page" : undefined} className={cn(chip, !active && "border-foreground bg-foreground text-background hover:bg-foreground/90")}>
+      <AppLink href="/" aria-current={!active ? "page" : undefined} className={cn(chip, !active && "border-foreground bg-foreground text-background hover:bg-foreground/90")}>
         All
-      </Link>
+      </AppLink>
       {repos.map(([repo, n]) => (
-        <Link
+        <AppLink
           key={repo}
           href={`/?repo=${encodeURIComponent(repo)}`}
           aria-current={active === repo ? "page" : undefined}
@@ -147,7 +146,7 @@ function RepoChips({ lists, active }: { lists: { repo: string }[][]; active?: st
         >
           {repo}
           <span className="tabular-nums opacity-60">{n}</span>
-        </Link>
+        </AppLink>
       ))}
     </nav>
   );

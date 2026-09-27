@@ -1,5 +1,3 @@
-"use client";
-
 import { Binary, Layers, Radar, RefreshCw } from "lucide-react";
 
 import { Button } from "@/components/ui/button";

@@ -1,9 +1,11 @@
-<!-- BEGIN:nextjs-agent-rules -->
+# GitHub Triage
 
-# This is NOT the Next.js you know
+A single-user GitHub dashboard: a Vite + React SPA served by a Hono Worker on Cloudflare,
+with a Durable Object (`src/edge/hub.ts`) as the only store and cache. See README for setup.
 
-This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
-
-This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
-
-<!-- END:nextjs-agent-rules -->
+- `src/client/` is the browser app, `src/worker/index.ts` the Worker (auth, webhook, `/api/*`),
+  `src/edge/` the Cloudflare side (Hub, auth, webhooks, live protocol), `src/lib/` shared logic.
+- `pnpm dev` runs the Worker and Durable Object in workerd via `@cloudflare/vite-plugin`.
+- Don't share an in-flight promise between requests in the Worker or Durable Object: on
+  Workers its I/O belongs to the request that started it, and other requests can hang.
+- Checks: `pnpm test`, `pnpm typecheck`, `pnpm lint`, `pnpm build`.

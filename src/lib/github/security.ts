@@ -1,6 +1,5 @@
-// Dependabot, code scanning & secret scanning: runtime-agnostic (no `server-only`, no env
-// reads) so both the Next server (local/dev, un-authenticated token) and the Hub Durable
-// Object (deployed, chunked background scan) can share the same per-repo scan logic.
+// Dependabot, code scanning & secret scanning per repo, run by the Hub Durable Object as a
+// chunked background scan. No env reads: the Hub passes the token.
 
 import { z } from "zod";
 
@@ -25,10 +24,7 @@ export const SCANNERS = {
 
 export type ScanResult = { status: ScannerStatus; message?: string; alerts: SecurityAlert[]; truncated: boolean };
 
-/**
- * Defined here (not in `data.ts`, which pulls in `next/cache` and `server-only`) so the Hub
- * Durable Object — a plain Workers class, not a Next.js request — can share the same shape.
- */
+/** A completed scan, as the Hub stores it and the API returns it. */
 export type SecurityReport = {
   alerts: SecurityAlert[];
   repos: { repo: string; scanners: Record<AlertSource, { status: ScannerStatus; message?: string }> }[];
@@ -64,6 +60,25 @@ const repoList = z.array(
 );
 const installationList = z.object({ installations: z.array(z.object({ id: z.number() })) });
 const installationRepos = z.object({ total_count: z.number(), repositories: repoList });
+
+/**
+ * Local mode (a personal token, no GitHub App): repos owned by `owners` (you plus TRIAGE_OWNERS,
+ * incl. private org repos), most recently pushed first, capped at `max`.
+ */
+export async function listOwnedRepos(auth: GitHubAuth, owners: string[], max: number): Promise<string[]> {
+  const wantedOwners = new Set(owners.map((o) => o.toLowerCase()));
+  const affiliation = wantedOwners.size > 1 ? "owner,organization_member" : "owner";
+  const wanted: string[] = [];
+  // sort=pushed is global across pages, so we can stop once we have enough.
+  for (let page = 1; page <= 10 && wanted.length < max; page++) {
+    const batch = repoList.parse(await rest(auth, `/user/repos?affiliation=${affiliation}&sort=pushed&per_page=100&page=${page}`));
+    for (const r of batch) {
+      if (!r.archived && !r.fork && wantedOwners.has(r.full_name.split("/")[0].toLowerCase())) wanted.push(r.full_name);
+    }
+    if (batch.length < 100) break;
+  }
+  return wanted.slice(0, max);
+}
 
 /**
  * OAuth mode: the repos the GitHub App is installed on, which are exactly the ones the

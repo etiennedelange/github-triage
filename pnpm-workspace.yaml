@@ -6,8 +6,3 @@ allowBuilds:
 minimumReleaseAgeExclude:
   - miniflare@5.20260926.0-alpha
   - wrangler@4.142.0
-# Stops OpenNext's cache handing one request's pending write to another, which hangs requests
-# on Workers (opennextjs/opennextjs-aws#1218). Fixed upstream in @opennextjs/aws 4.1.5; drop this
-# once @opennextjs/cloudflare depends on >=4.1.5.
-patchedDependencies:
-  '@opennextjs/aws@4.1.4': patches/@opennextjs__aws@4.1.4.patch

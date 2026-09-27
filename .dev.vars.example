@@ -1,7 +1,21 @@
-# Copy to .dev.vars for `pnpm preview`. Use a separate dev GitHub App whose callback is
-# http://localhost:8787/auth/callback. See README "Deploying to Cloudflare".
-GITHUB_CLIENT_ID=
-GITHUB_CLIENT_SECRET=
-GITHUB_WEBHOOK_SECRET=
-SESSION_SECRET=
-ALLOWED_LOGINS=
+# Copy to .dev.vars for `pnpm dev` / `pnpm preview`. Pick ONE mode.
+
+# --- Local mode (simplest): no GitHub App, no sign-in, only reachable on localhost. ---
+# A personal token, e.g. the output of `gh auth token` (add `security_events` for alerts:
+# `gh auth refresh -s security_events`). Fine-grained: read access to Metadata, Pull requests,
+# Issues, Dependabot alerts, Code scanning alerts and Secret scanning alerts.
+GITHUB_TOKEN=
+
+# --- OAuth mode: like production. Use a separate dev GitHub App whose callback is
+# http://localhost:5173/auth/callback. Setting GITHUB_CLIENT_ID switches this mode on. ---
+# GITHUB_CLIENT_ID=
+# GITHUB_CLIENT_SECRET=
+# GITHUB_WEBHOOK_SECRET=
+# SESSION_SECRET=
+# ALLOWED_LOGINS=
+
+# --- Either mode (these are also `vars` in wrangler.jsonc) ---
+# Comma-separated orgs whose repos also count as "yours" for incoming PRs, untriaged issues and scans.
+# TRIAGE_OWNERS=
+# Cap on repos scanned for security alerts, most recently pushed first. Default 50.
+# TRIAGE_MAX_REPOS=
