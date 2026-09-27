@@ -13,6 +13,8 @@ export class AppErrorBoundary extends Component<Props, State> {
     return { error };
   }
 
+  reset = () => this.setState({ error: null });
+
   render() {
     const { error } = this.state;
     if (!error) return this.props.children;
@@ -20,7 +22,7 @@ export class AppErrorBoundary extends Component<Props, State> {
       <div role="alert" className="mx-auto max-w-xl space-y-3 p-6">
         <h1 className="font-semibold">Something went wrong</h1>
         <p className="font-mono text-xs break-words text-muted-foreground">{error.message}</p>
-        <Button variant="outline" size="sm" onClick={() => this.setState({ error: null })}>
+        <Button variant="outline" size="sm" onClick={this.reset}>
           Try again
         </Button>
       </div>
