@@ -19,6 +19,13 @@
     // Comma-separated GitHub logins allowed to sign in.
     "ALLOWED_LOGINS": "etiennedelange",
     "TRIAGE_OWNERS": ""
+  },
+  // `wrangler preview`: same (non-secret) vars as production, since ALLOWED_LOGINS is just a login list.
+  "previews": {
+    "vars": {
+      "ALLOWED_LOGINS": "etiennedelange",
+      "TRIAGE_OWNERS": ""
+    }
   }
   // Secrets (wrangler secret put): GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET, GITHUB_WEBHOOK_SECRET, SESSION_SECRET
 }
