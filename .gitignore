@@ -2,3 +2,13 @@ node_modules/
 .env*
 !.env.example
 .DS_Store
+
+# Next.js
+/.next/
+/out/
+next-env.d.ts
+*.tsbuildinfo
+
+# Debug logs
+npm-debug.log*
+pnpm-debug.log*
