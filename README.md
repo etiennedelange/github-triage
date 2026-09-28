@@ -2,7 +2,7 @@
 
 One pane for everything on GitHub that's waiting on you: pull requests, issues and security alerts. It updates in real time: when a PR is opened, reviewed or its checks finish, just that row changes on screen within a couple of seconds, with no reload.
 
-> **A personal tool.** This is built for my own use and shared as-is. It currently supports **one GitHub account** per deployment: a single login (`ALLOWED_LOGINS`) whose tokens, cache and live updates live in one Durable Object. Supporting several people would need per-user storage and routing webhooks to the right users. Feel free to deploy your own copy.
+> **A personal tool.** This is built for my own use and shared as-is. It's meant for **one GitHub account** per deployment (`ALLOWED_LOGINS`). Each login gets its own Hub Durable Object for its tokens, cache and live updates, but every webhook goes to every allowed login's Hub, so it isn't built for people who shouldn't see each other's repos. Feel free to deploy your own copy under the [license](#license).
 
 **Light**
 
@@ -81,7 +81,7 @@ The browser app is a static Vite + React SPA. The Worker (`src/worker/index.ts`,
 | `/api/live`                                                                                        | The dashboard's WebSocket.                                                                                                   |
 | everything else                                                                                    | The SPA's static files, behind the session check.                                                                            |
 
-The **Hub** Durable Object (`src/edge/hub.ts`) holds your OAuth tokens and refreshes them. Refresh tokens are single-use, so there's exactly one place that refreshes. It also holds the open tabs' WebSockets, which hibernate so idle tabs cost nothing, and it turns changes into small updates:
+The **Hub** Durable Object (`src/edge/hub.ts`), one per signed-in login, holds your OAuth tokens and refreshes them. Refresh tokens are single-use, so there's exactly one place that refreshes. It also holds the open tabs' WebSockets, which hibernate so idle tabs cost nothing, and it turns changes into small updates:
 
 - A webhook is reduced to the one PR or issue it's about (`src/edge/events.ts`). A 1.5s debounce collapses bursts, such as 20 check suites finishing, into **one** GraphQL request for just those items. Each item is then filed into panels with the same rules as the inbox searches (`sectionsFor` in `src/lib/triage.ts`), and only that item is pushed.
 - Security alert webhooks carry the alert itself, so they're pushed with no API call.

@@ -16,10 +16,14 @@ export type EdgeEnv = Omit<CloudflareEnv, "HUB"> & {
   GITHUB_TOKEN?: string;
 };
 
-/** Single user, single Hub. */
-export function hubStub(env: Pick<EdgeEnv, "HUB">) {
-  return env.HUB.get(env.HUB.idFromName("hub"));
+/** Each GitHub login gets its own Hub; local mode signs in as "local". */
+export function hubFor(env: Pick<EdgeEnv, "HUB">, login: string) {
+  return env.HUB.get(env.HUB.idFromName(`${HUB_PREFIX}${login.toLowerCase()}`));
 }
+
+export const HUB_PREFIX = "login:";
+/** The one Hub a deployment had before Hubs were per login. See Hub.adoptLegacy. */
+export const LEGACY_HUB = "hub";
 
 export const splitList = (s: string | undefined) =>
   (s ?? "")
