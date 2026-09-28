@@ -1,4 +1,17 @@
-import { CircleCheck, CircleDot, Eye, GitPullRequest, GitPullRequestArrow, Inbox as InboxIcon, ShieldAlert } from "lucide-react";
+import {
+  CircleCheck,
+  CircleDot,
+  CircleX,
+  Eye,
+  FileDiff,
+  GitCompareArrows,
+  GitMerge,
+  GitPullRequest,
+  GitPullRequestArrow,
+  Inbox as InboxIcon,
+  ShieldAlert,
+  type LucideIcon,
+} from "lucide-react";
 import { Children, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 
 import { useSecurity } from "@/client/api";
@@ -239,7 +252,14 @@ const TEXT: Record<Tone, string> = {
   muted: "text-muted-foreground",
 };
 
-type Waiting = { key: string; href: string; count: number; label: [one: string, many: string]; tone: Tone };
+type Waiting = {
+  key: string;
+  href: string;
+  icon: LucideIcon;
+  count: number;
+  label: [one: string, many: string];
+  tone: Tone;
+};
 
 /**
  * The board's headline: everything waiting on you, most urgent first, as links to where it is.
@@ -260,62 +280,105 @@ function WaitingOnYou({
   const security = useSecurityCounts(repo);
   const alerts = security.state === "ok" ? security.counts : undefined;
   const all: Waiting[] = [
-    { key: "critical", href: "#security", count: alerts?.critical ?? 0, label: ["critical alert", "critical alerts"], tone: "danger" },
-    { key: "failing", href: "#mine", count: pr.failing, label: ["PR failing checks", "PRs failing checks"], tone: "danger" },
-    { key: "reviews", href: "#review", count: reviews, label: ["review requested", "reviews requested"], tone: "orange" },
+    {
+      key: "critical",
+      href: "#security",
+      icon: ShieldAlert,
+      count: alerts?.critical ?? 0,
+      label: ["critical alert", "critical alerts"],
+      tone: "danger",
+    },
+    { key: "failing", href: "#mine", icon: CircleX, count: pr.failing, label: ["PR failing checks", "PRs failing checks"], tone: "danger" },
+    { key: "reviews", href: "#review", icon: Eye, count: reviews, label: ["review requested", "reviews requested"], tone: "orange" },
     {
       key: "changes",
       href: "#mine",
+      icon: FileDiff,
       count: pr.changes,
       label: ["PR with changes requested", "PRs with changes requested"],
       tone: "orange",
     },
-    { key: "conflicts", href: "#mine", count: pr.conflicts, label: ["PR with conflicts", "PRs with conflicts"], tone: "orange" },
-    { key: "high", href: "#security", count: alerts?.high ?? 0, label: ["high alert", "high alerts"], tone: "orange" },
-    { key: "assigned", href: "#assigned", count: assigned, label: ["issue assigned", "issues assigned"], tone: "muted" },
-    { key: "merge", href: "#mine", count: pr.mergeable, label: ["PR ready to merge", "PRs ready to merge"], tone: "success" },
+    {
+      key: "conflicts",
+      href: "#mine",
+      icon: GitCompareArrows,
+      count: pr.conflicts,
+      label: ["PR with conflicts", "PRs with conflicts"],
+      tone: "orange",
+    },
+    { key: "high", href: "#security", icon: ShieldAlert, count: alerts?.high ?? 0, label: ["high alert", "high alerts"], tone: "orange" },
+    { key: "assigned", href: "#assigned", icon: CircleDot, count: assigned, label: ["issue assigned", "issues assigned"], tone: "muted" },
+    {
+      key: "merge",
+      href: "#mine",
+      icon: GitMerge,
+      count: pr.mergeable,
+      label: ["PR ready to merge", "PRs ready to merge"],
+      tone: "success",
+    },
   ];
   const waiting = all.filter((w) => w.count > 0);
-  // Ranked in two tiers: what's blocking (red, orange) reads as the headline; the rest steps down.
-  const now = waiting.filter((w) => w.tone === "danger" || w.tone === "orange");
-  const then = waiting.filter((w) => !now.includes(w));
+  // Ranked in two tiers: what's blocking (red, orange) fills the strip; the rest steps down below it.
+  // With nothing blocking, the quieter tier moves up into the strip.
+  const blocking = waiting.filter((w) => w.tone === "danger" || w.tone === "orange");
+  const strip = blocking.length > 0 ? blocking : waiting;
+  const rest = waiting.filter((w) => !strip.includes(w));
   const sig = [...waiting.map((w) => `${w.key}:${w.count}`), security.state].join("|");
-  const item = (w: Waiting, strong: boolean) => (
-    <a
-      key={w.key}
-      href={w.href}
-      className={cn(
-        "-my-1 py-1 whitespace-nowrap underline-offset-4 hover:underline",
-        strong ? "text-sm font-semibold sm:text-base" : "text-sm font-medium text-muted-foreground hover:text-foreground",
-      )}
-    >
-      <span className={cn("mr-1 font-mono tabular-nums", TEXT[w.tone])}>
-        <FxNumber value={w.count} />
-      </span>
-      {w.label[w.count === 1 ? 0 : 1]}
-    </a>
-  );
+  const allClear = waiting.length === 0 && security.state === "ok";
 
   return (
-    <nav aria-label="Waiting on you" data-fx-panel data-fx-sig={sig} className="flex flex-wrap items-baseline gap-x-5 gap-y-1.5 py-1">
-      {waiting.length === 0 && security.state === "ok" ? (
-        <p className="inline-flex items-center gap-1.5 text-base font-semibold">
-          <CircleCheck aria-hidden className="size-4 self-center text-success" />
-          Nothing is waiting on you{repo ? ` in ${repo}` : ""}.
-        </p>
-      ) : (
-        <>
-          {now.map((w) => item(w, true))}
-          {now.length > 0 && then.length > 0 && <span aria-hidden className="hidden h-4 w-px self-center bg-border sm:block" />}
-          {then.map((w) => item(w, now.length === 0))}
-        </>
+    <nav aria-label="Waiting on you" data-fx-panel data-fx-sig={sig} className="space-y-2">
+      {(allClear || strip.length > 0) && (
+        // Cells draw their dividers as 1px shadows on the right and bottom, and the strip clips the outer
+        // ones. From sm up the strip hugs its cells while they fit on one line; once they wrap it takes the
+        // full width and the cells grow to fill each row, so no row ends in an empty gap.
+        <div className="grid grid-cols-2 overflow-hidden rounded-xl border bg-card sm:flex sm:w-fit sm:max-w-full sm:flex-wrap">
+          {allClear ? (
+            <p className="col-span-full flex min-h-12 items-center gap-2.5 px-3 pr-5 text-sm font-semibold">
+              <CircleCheck aria-hidden className="size-4 shrink-0 text-success" />
+              Nothing is waiting on you{repo ? ` in ${repo}` : ""}.
+            </p>
+          ) : (
+            strip.map((w) => (
+              <a
+                key={w.key}
+                href={w.href}
+                className="flex min-h-12 items-center gap-2.5 px-3 py-2 shadow-[1px_0_0_var(--border),0_1px_0_var(--border)] transition-colors odd:last:col-span-2 hover:bg-muted focus-visible:relative focus-visible:z-10 sm:grow sm:pr-5 sm:whitespace-nowrap"
+              >
+                <w.icon aria-hidden className={cn("size-4 shrink-0", TEXT[w.tone])} />
+                <span className="text-sm leading-snug font-medium">
+                  <span className={cn("mr-[0.3em] text-base font-bold tabular-nums", TEXT[w.tone])}>
+                    <FxNumber value={w.count} />
+                  </span>
+                  {w.label[w.count === 1 ? 0 : 1]}
+                </span>
+              </a>
+            ))
+          )}
+        </div>
       )}
-      {security.state === "pending" && <span className="text-xs text-muted-foreground">Checking security alerts…</span>}
-      {security.state === "scanning" && <span className="text-xs text-muted-foreground">Security scan running…</span>}
-      {security.state === "error" && (
-        <a href="#security" className="text-sm font-medium text-destructive underline-offset-4 hover:underline">
-          Security alerts couldn't load
-        </a>
+      {(rest.length > 0 || security.state !== "ok") && (
+        <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 text-sm">
+          {rest.map((w) => (
+            <a
+              key={w.key}
+              href={w.href}
+              className="font-medium whitespace-nowrap text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+            >
+              <span className={cn("mr-[0.25em] font-bold tabular-nums", TEXT[w.tone])}>
+                <FxNumber value={w.count} />
+              </span>
+              {w.label[w.count === 1 ? 0 : 1]}
+            </a>
+          ))}
+          {security.state === "pending" && <span className="text-xs text-muted-foreground">Checking security alerts…</span>}
+          {security.state === "scanning" && <span className="text-xs text-muted-foreground">Security scan running…</span>}
+          {security.state === "error" && (
+            <a href="#security" className="font-medium text-destructive underline-offset-4 hover:underline">
+              Security alerts couldn't load
+            </a>
+          )}
+        </div>
       )}
     </nav>
   );
