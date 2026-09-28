@@ -46,18 +46,12 @@ export async function scanOne(auth: GitHubAuth, repo: string, source: AlertSourc
     if (!(err instanceof GitHubError)) throw err;
     // 404 = feature off / no analysis yet; 403 = feature off, or the token lacks the scope.
     const status: ScannerStatus =
-      err.status === 404 || /disabled|not enabled|no analysis/i.test(err.message)
-        ? "disabled"
-        : err.status === 403
-          ? "forbidden"
-          : "error";
+      err.status === 404 || /disabled|not enabled|no analysis/i.test(err.message) ? "disabled" : err.status === 403 ? "forbidden" : "error";
     return { status, message: err.message, alerts: [], truncated: false };
   }
 }
 
-const repoList = z.array(
-  z.object({ full_name: z.string(), archived: z.boolean(), fork: z.boolean(), pushed_at: z.string().nullish() }),
-);
+const repoList = z.array(z.object({ full_name: z.string(), archived: z.boolean(), fork: z.boolean(), pushed_at: z.string().nullish() }));
 const installationList = z.object({ installations: z.array(z.object({ id: z.number() })) });
 const installationRepos = z.object({ total_count: z.number(), repositories: repoList });
 

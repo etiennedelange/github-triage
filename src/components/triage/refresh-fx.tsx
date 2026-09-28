@@ -220,8 +220,7 @@ export function FxText({ text, className }: { text: string; className?: string }
   useEffect(() => {
     const el = out.current;
     if (!el || !active) return;
-    const scramble = (resolved: number) =>
-      (el.textContent = [...text].map((c, i) => (i < resolved || c === " " ? c : glyph())).join(""));
+    const scramble = (resolved: number) => (el.textContent = [...text].map((c, i) => (i < resolved || c === " " ? c : glyph())).join(""));
 
     if (phase === "pending") {
       const id = setInterval(() => scramble(0), 55);
@@ -279,10 +278,7 @@ function Odometer({ from, to }: { from: string; to: string }) {
         const end = b > a ? b : b + 10;
         return (
           <span key={i} aria-hidden className="fx-odo-col">
-            <span
-              className="fx-odo-reel"
-              style={{ "--from": offset(a), "--to": offset(a === b ? a : end), "--i": i } as CSSProperties}
-            >
+            <span className="fx-odo-reel" style={{ "--from": offset(a), "--to": offset(a === b ? a : end), "--i": i } as CSSProperties}>
               {Array.from({ length: 20 }, (_, n) => (
                 <span key={n}>{n % 10}</span>
               ))}

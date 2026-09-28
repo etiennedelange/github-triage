@@ -96,6 +96,7 @@ export function pruneRuns(runs: ClaudeRuns, now = Date.now()): ClaudeRuns {
 export function runLink(run: ClaudeRun): string {
   if (run.prUrl) return run.prUrl;
   // The comment's origin, so GitHub Enterprise hosts work too.
-  if (run.branch) return `${new URL(run.commentUrl).origin}/${run.repo}/compare/${run.branch.split("/").map(encodeURIComponent).join("/")}?expand=1`;
+  if (run.branch)
+    return `${new URL(run.commentUrl).origin}/${run.repo}/compare/${run.branch.split("/").map(encodeURIComponent).join("/")}?expand=1`;
   return run.commentUrl;
 }

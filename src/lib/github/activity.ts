@@ -75,9 +75,7 @@ const response = z.object({
             .object({
               nameWithOwner: z.string(),
               stargazerCount: z.number(),
-              stargazers: z
-                .object({ edges: z.array(z.object({ starredAt: z.string(), node: user.nullable() }).nullable()) })
-                .nullish(),
+              stargazers: z.object({ edges: z.array(z.object({ starredAt: z.string(), node: user.nullable() }).nullable()) }).nullish(),
               watchers: z.object({ totalCount: z.number(), nodes: z.array(user.nullable()) }).nullish(),
             })
             .nullable(),
@@ -106,7 +104,9 @@ export type Snapshot = {
 export async function fetchSnapshot(auth: GitHubAuth): Promise<Snapshot> {
   const errors: GraphQLErrorEntry[] = [];
   const opts = { partial: true, onErrors: (e: GraphQLErrorEntry[]) => void errors.push(...e) };
-  const first = response.parse(await graphql(auth, QUERY, { after: null, withRepos: true, stars: STARS_PER_REPO, watchers: WATCHERS_PER_REPO }, opts));
+  const first = response.parse(
+    await graphql(auth, QUERY, { after: null, withRepos: true, stars: STARS_PER_REPO, watchers: WATCHERS_PER_REPO }, opts),
+  );
   type Edge = { cursor: string; node: ActivityUser | null } | null;
   let followersComplete = Boolean(first.viewer.followers);
   const toFollowers = (edges: Edge[] = []): Follower[] =>
@@ -206,5 +206,13 @@ export function toActivity(snap: Snapshot, seen: { followers: Seen; watchers: Se
   // Your own stars aren't news (the webhook sends them too).
   const stars = [...snap.stars, ...log.stars.filter((s) => !listed.has(starKey(s)) && s.user.login !== snap.viewer)];
   const events = [...stars, ...follows, ...watches].toSorted((a, b) => b.at.localeCompare(a.at)).slice(0, ACTIVITY_KEPT);
-  return { events, starsSince: snap.complete.stars ? undefined : log.since, followers: snap.followerCount, stars: snap.starCount, watchers: snap.watcherCount, warning: snap.warning, fetchedAt };
+  return {
+    events,
+    starsSince: snap.complete.stars ? undefined : log.since,
+    followers: snap.followerCount,
+    stars: snap.starCount,
+    watchers: snap.watcherCount,
+    warning: snap.warning,
+    fetchedAt,
+  };
 }

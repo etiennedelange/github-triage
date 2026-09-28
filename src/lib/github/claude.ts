@@ -63,7 +63,10 @@ export async function fetchRunProgress(auth: GitHubAuth, run: ClaudeRun): Promis
   let branch = run.branch;
   if (!branch) {
     const found = refs.parse(await rest(auth, `/repos/${repo}/git/matching-refs/heads/claude/issue-${number}-`));
-    branch = branchForRun(run, found.map((r) => r.ref.replace(/^refs\/heads\//, "")));
+    branch = branchForRun(
+      run,
+      found.map((r) => r.ref.replace(/^refs\/heads\//, "")),
+    );
     if (branch) signals.push({ kind: "branch", repo, number, branch });
   }
   if (branch) {

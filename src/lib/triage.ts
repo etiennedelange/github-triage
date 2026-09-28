@@ -36,9 +36,7 @@ export const pullRequestNode = z
       nodes: z.array(
         z.object({
           commit: z.object({
-            statusCheckRollup: z
-              .object({ state: z.enum(["SUCCESS", "FAILURE", "ERROR", "PENDING", "EXPECTED"]) })
-              .nullable(),
+            statusCheckRollup: z.object({ state: z.enum(["SUCCESS", "FAILURE", "ERROR", "PENDING", "EXPECTED"]) }).nullable(),
           }),
         }),
       ),
@@ -131,10 +129,7 @@ const NEXT_STEP_RANK: Record<PrNextStep, number> = {
 };
 
 export function sortByNextStep(prs: PullRequest[]): PullRequest[] {
-  return prs.toSorted(
-    (a, b) =>
-      NEXT_STEP_RANK[prNextStep(a)] - NEXT_STEP_RANK[prNextStep(b)] || b.updatedAt.localeCompare(a.updatedAt),
-  );
+  return prs.toSorted((a, b) => NEXT_STEP_RANK[prNextStep(a)] - NEXT_STEP_RANK[prNextStep(b)] || b.updatedAt.localeCompare(a.updatedAt));
 }
 
 // ---------- Inbox sections ----------
@@ -209,9 +204,7 @@ export const dependabotAlert = z
     createdAt: a.created_at,
     severity: severity(a.security_advisory.severity),
     title: a.security_advisory.summary,
-    detail: a.dependency.package
-      ? `${a.dependency.package.ecosystem}/${a.dependency.package.name}`
-      : (a.dependency.manifest_path ?? ""),
+    detail: a.dependency.package ? `${a.dependency.package.ecosystem}/${a.dependency.package.name}` : (a.dependency.manifest_path ?? ""),
   }));
 
 export const codeScanningAlert = z
@@ -260,9 +253,7 @@ export const secretScanningAlert = z
 
 export type AlertSource = "dependabot" | "code-scanning" | "secret-scanning";
 export type SecurityAlert = (
-  | z.output<typeof dependabotAlert>
-  | z.output<typeof codeScanningAlert>
-  | z.output<typeof secretScanningAlert>
+  z.output<typeof dependabotAlert> | z.output<typeof codeScanningAlert> | z.output<typeof secretScanningAlert>
 ) & { repo: string };
 
 /** Why a scanner produced no data for a repo, so the UI can say so instead of showing a false zero. */

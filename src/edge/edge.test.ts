@@ -25,7 +25,7 @@ describe("session cookie", () => {
     expect(await verifySession("k", v, 1_000)).toBe("octocat");
     expect(await verifySession("k", v, 2_000)).toBeNull();
     expect(await verifySession("k", v.replace("octocat", "hubot"), 1_000)).toBeNull();
-    expect(await verifySession("k", v.replace(".2000.", ".9999.") , 1_000)).toBeNull();
+    expect(await verifySession("k", v.replace(".2000.", ".9999."), 1_000)).toBeNull();
     expect(await verifySession("other", v, 1_000)).toBeNull();
     expect(await verifySession("k", undefined, 1_000)).toBeNull();
   });
@@ -112,12 +112,22 @@ describe("OAuth callback", () => {
 describe("token refresh", () => {
   function setup(tokens: StoredTokens | undefined, respond: () => Promise<Response>) {
     let stored = tokens;
-    const store = { get: async () => stored, put: async (t: StoredTokens) => void (stored = t), delete: async () => void (stored = undefined) };
+    const store = {
+      get: async () => stored,
+      put: async (t: StoredTokens) => void (stored = t),
+      delete: async () => void (stored = undefined),
+    };
     const fetch = vi.fn(respond) as unknown as typeof globalThis.fetch;
     const keeper = new TokenKeeper(store, { clientId: "cid", clientSecret: "csec" }, fetch, () => 1_000_000);
     return { keeper, fetch, stored: () => stored };
   }
-  const expiring: StoredTokens = { login: "octocat", access: "old", accessExpiresAt: 1_000_000 + 60_000, refresh: "r1", refreshExpiresAt: 9e12 };
+  const expiring: StoredTokens = {
+    login: "octocat",
+    access: "old",
+    accessExpiresAt: 1_000_000 + 60_000,
+    refresh: "r1",
+    refreshExpiresAt: 9e12,
+  };
 
   it("serves a fresh token without refreshing", async () => {
     const { keeper, fetch } = setup({ ...expiring, accessExpiresAt: 9e12 }, async () => Response.json({}));
@@ -153,9 +163,15 @@ describe("webhook → changes", () => {
   const repository = { full_name: "acme/api", default_branch: "main" };
 
   it("reduces PR and issue activity to one subject", () => {
-    expect(changesFor("pull_request", { action: "opened", repository, pull_request: { number: 7 } })).toEqual([{ kind: "subject", key: "acme/api#7" }]);
-    expect(changesFor("pull_request_review", { action: "submitted", repository, pull_request: { number: 7 } })).toEqual([{ kind: "subject", key: "acme/api#7" }]);
-    expect(changesFor("issue_comment", { action: "created", repository, issue: { number: 3 } })).toEqual([{ kind: "subject", key: "acme/api#3" }]);
+    expect(changesFor("pull_request", { action: "opened", repository, pull_request: { number: 7 } })).toEqual([
+      { kind: "subject", key: "acme/api#7" },
+    ]);
+    expect(changesFor("pull_request_review", { action: "submitted", repository, pull_request: { number: 7 } })).toEqual([
+      { kind: "subject", key: "acme/api#7" },
+    ]);
+    expect(changesFor("issue_comment", { action: "created", repository, issue: { number: 3 } })).toEqual([
+      { kind: "subject", key: "acme/api#3" },
+    ]);
   });
 
   it("maps finished check suites to their PRs and ignores the rest", () => {
@@ -178,9 +194,9 @@ describe("webhook → changes", () => {
       { kind: "subject", key: "acme/api#3" },
       { kind: "claude", signal: { kind: "working", repo: "acme/api", number: 3 } },
     ]);
-    expect(changesFor("issue_comment", { action: "created", repository, issue: { number: 3 }, sender: { ...bot, login: "octocat" } })).toEqual([
-      { kind: "subject", key: "acme/api#3" },
-    ]);
+    expect(
+      changesFor("issue_comment", { action: "created", repository, issue: { number: 3 }, sender: { ...bot, login: "octocat" } }),
+    ).toEqual([{ kind: "subject", key: "acme/api#3" }]);
     const ref = "refs/heads/claude/issue-3-20260928-1200";
     expect(changesFor("push", { ref, repository })).toEqual([
       { kind: "claude", signal: { kind: "branch", repo: "acme/api", number: 3, branch: "claude/issue-3-20260928-1200" } },
@@ -191,7 +207,9 @@ describe("webhook → changes", () => {
       { kind: "subject", key: "acme/api#8" },
       { kind: "claude", signal: { kind: "pr", repo: "acme/api", number: 3, url: pull_request.html_url } },
     ]);
-    expect(changesFor("pull_request", { action: "synchronize", repository, pull_request })).toEqual([{ kind: "subject", key: "acme/api#8" }]);
+    expect(changesFor("pull_request", { action: "synchronize", repository, pull_request })).toEqual([
+      { kind: "subject", key: "acme/api#8" },
+    ]);
   });
 
   it("carries security alerts in the payload, so no API call is needed", () => {
@@ -203,7 +221,10 @@ describe("webhook → changes", () => {
       dependency: { package: { name: "x", ecosystem: "npm" } },
     };
     expect(changesFor("dependabot_alert", { action: "created", repository, alert })).toEqual([
-      { kind: "alert", alert: expect.objectContaining({ source: "dependabot", severity: "critical", repo: "acme/api", url: alert.html_url }) },
+      {
+        kind: "alert",
+        alert: expect.objectContaining({ source: "dependabot", severity: "critical", repo: "acme/api", url: alert.html_url }),
+      },
     ]);
     expect(changesFor("dependabot_alert", { action: "fixed", repository, alert })).toEqual([{ kind: "alert-gone", url: alert.html_url }]);
     expect(changesFor("secret_scanning_alert", { action: "created", repository, alert: { number: 9, html_url: "u" } })).toEqual([
@@ -224,9 +245,18 @@ describe("webhook → changes", () => {
 
   it("carries who starred, where and when", () => {
     const sender = { login: "fan", avatar_url: "a", html_url: "https://github.com/fan" };
-    const star = { kind: "star", at: "2026-09-28T10:00:00Z", user: { login: "fan", avatarUrl: "a", url: "https://github.com/fan" }, repo: "acme/api" };
-    expect(changesFor("star", { action: "created", repository, sender, starred_at: star.at })).toEqual([{ kind: "star", starred: true, star }]);
-    expect(changesFor("star", { action: "deleted", repository, sender, starred_at: null })).toMatchObject([{ kind: "star", starred: false }]);
+    const star = {
+      kind: "star",
+      at: "2026-09-28T10:00:00Z",
+      user: { login: "fan", avatarUrl: "a", url: "https://github.com/fan" },
+      repo: "acme/api",
+    };
+    expect(changesFor("star", { action: "created", repository, sender, starred_at: star.at })).toEqual([
+      { kind: "star", starred: true, star },
+    ]);
+    expect(changesFor("star", { action: "deleted", repository, sender, starred_at: null })).toMatchObject([
+      { kind: "star", starred: false },
+    ]);
     expect(changesFor("star", { action: "created", repository })).toEqual([]);
   });
 

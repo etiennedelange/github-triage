@@ -60,7 +60,15 @@ export function Pill({ tone, children, className }: { tone: Tone; children: Reac
 /** `live`: arrived or changed via a live update; the row flashes once (see [data-live] in globals.css). */
 type LiveProp = { live?: boolean };
 
-function Row({ icon, title, url, number, meta, trailing, live }: LiveProp & {
+function Row({
+  icon,
+  title,
+  url,
+  number,
+  meta,
+  trailing,
+  live,
+}: LiveProp & {
   icon: ReactNode;
   title: string;
   url: string;
@@ -185,7 +193,12 @@ export function PrRow({ pr, perspective, live }: LiveProp & { pr: PullRequest; p
   const review = pr.review && REVIEW[pr.review];
   return (
     <Row
-      icon={<Icon aria-label={pr.isDraft ? "Draft pull request" : "Pull request"} className={cn("size-4", pr.isDraft ? "text-muted-foreground" : "text-success")} />}
+      icon={
+        <Icon
+          aria-label={pr.isDraft ? "Draft pull request" : "Pull request"}
+          className={cn("size-4", pr.isDraft ? "text-muted-foreground" : "text-success")}
+        />
+      }
       title={pr.title}
       url={pr.url}
       number={pr.number}
@@ -260,7 +273,11 @@ export function AlertRow({ alert, live }: LiveProp & { alert: SecurityAlert }) {
           <Age iso={alert.createdAt} verb="opened" flagStale={false} />
         </>
       }
-      trailing={<Pill tone={SEVERITY_TONE[alert.severity]} className="capitalize">{alert.severity}</Pill>}
+      trailing={
+        <Pill tone={SEVERITY_TONE[alert.severity]} className="capitalize">
+          {alert.severity}
+        </Pill>
+      }
     />
   );
 }

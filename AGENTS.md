@@ -8,4 +8,4 @@ with a Durable Object (`src/edge/hub.ts`) as the only store and cache. See READM
 - `pnpm dev` runs the Worker and Durable Object in workerd via `@cloudflare/vite-plugin`.
 - Don't share an in-flight promise between requests in the Worker or Durable Object: on
   Workers its I/O belongs to the request that started it, and other requests can hang.
-- Checks: `pnpm test`, `pnpm typecheck`, `pnpm lint`, `pnpm build`.
+- Checks: `pnpm test`, `pnpm typecheck`, `pnpm lint`, `pnpm format:check`, `pnpm build`. Format with `pnpm format`.

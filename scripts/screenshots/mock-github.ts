@@ -18,13 +18,17 @@ function graphql(query: string): unknown {
 
 /** Fix with Claude: acme/storefront runs the Claude Action; acme/api has CI only. */
 const WORKFLOWS: Record<string, Record<string, string>> = {
-  "acme/storefront": { "ci.yml": "steps:\n  - uses: actions/checkout@v4\n", "claude.yml": "steps:\n  - uses: anthropics/claude-code-action@v1\n" },
+  "acme/storefront": {
+    "ci.yml": "steps:\n  - uses: actions/checkout@v4\n",
+    "claude.yml": "steps:\n  - uses: anthropics/claude-code-action@v1\n",
+  },
   "acme/api": { "ci.yml": "steps:\n  - uses: actions/checkout@v4\n" },
 };
 
 function rest(path: string, method = "GET"): { status: number; body: unknown } {
   const comment = path.match(/^\/repos\/([^/]+\/[^/]+)\/issues\/(\d+)\/comments$/);
-  if (comment && method === "POST") return { status: 201, body: { html_url: `https://github.com/${comment[1]}/issues/${comment[2]}#issuecomment-1` } };
+  if (comment && method === "POST")
+    return { status: 201, body: { html_url: `https://github.com/${comment[1]}/issues/${comment[2]}#issuecomment-1` } };
   const wf = path.match(/^\/repos\/([^/]+\/[^/]+)\/contents\/\.github\/workflows(?:\/(.+))?$/);
   if (wf) {
     const files = WORKFLOWS[wf[1]];

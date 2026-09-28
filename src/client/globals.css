@@ -188,12 +188,7 @@
   }
   [data-fx="cascade"][data-phase="pending"] [data-fx-panel]::after {
     opacity: 1;
-    background: linear-gradient(
-      105deg,
-      transparent 35%,
-      color-mix(in oklab, var(--foreground) 9%, transparent) 50%,
-      transparent 65%
-    );
+    background: linear-gradient(105deg, transparent 35%, color-mix(in oklab, var(--foreground) 9%, transparent) 50%, transparent 65%);
     background-size: 300% 100%;
     animation: fx-shimmer 1.3s ease-in-out infinite;
     animation-delay: calc(var(--fx-i, 0) * 80ms);
@@ -213,11 +208,7 @@
     position: absolute;
     inset: 0;
     background:
-      repeating-linear-gradient(
-        0deg,
-        color-mix(in oklab, var(--success) 7%, transparent) 0 1px,
-        transparent 1px 3px
-      ),
+      repeating-linear-gradient(0deg, color-mix(in oklab, var(--success) 7%, transparent) 0 1px, transparent 1px 3px),
       radial-gradient(ellipse at center, transparent 55%, color-mix(in oklab, var(--foreground) 10%, transparent));
   }
   .fx-scanline {

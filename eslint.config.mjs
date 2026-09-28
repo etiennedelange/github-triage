@@ -6,7 +6,7 @@ import globals from "globals";
 import tseslint from "typescript-eslint";
 
 export default defineConfig([
-  globalIgnores(["dist/**", ".wrangler/**", "cloudflare-env.d.ts"]),
+  globalIgnores(["dist/**", ".wrangler/**", ".claude/**", "scripts/.audit-tmp/**", "cloudflare-env.d.ts"]),
   js.configs.recommended,
   ...tseslint.configs.recommended,
   reactHooks.configs.flat.recommended,
