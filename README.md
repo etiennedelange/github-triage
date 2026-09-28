@@ -130,10 +130,10 @@ A scan is 3 GitHub calls per repo, which can be well over Cloudflare Workers' pe
 Open the repository in its dev container (VS Code: **Dev Containers: Clone Repository in Container Volume**). The container provides Node.js 24, pnpm via Corepack, the GitHub CLI and Claude Code. Claude's configuration lives in a per-container volume, so run `claude` once to sign in and `gh auth login` to authenticate the GitHub CLI.
 
 ```sh
+pnpm check       # format, lint and type-check (Vite+: Oxfmt, Oxlint)
 pnpm test        # Vitest: triage rules, alert normalization, auth, webhooks
-pnpm typecheck
-pnpm lint
 pnpm build
+pnpm format      # apply formatting
 pnpm screenshots # regenerate docs/screenshots from fictional data
 ```
 

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 
 import { overlayAlerts, overlayItems, type AlertPatch, type ItemPatch } from "./live";
 import type { PullRequest, SecurityAlert } from "./triage";

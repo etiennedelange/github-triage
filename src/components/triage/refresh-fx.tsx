@@ -220,6 +220,8 @@ export function FxText({ text, className }: { text: string; className?: string }
   useEffect(() => {
     const el = out.current;
     if (!el || !active) return;
+    // Splitting per code point is fine here: the scramble is cosmetic, and the real text stays in the DOM.
+    // oxlint-disable-next-line typescript/no-misused-spread
     const scramble = (resolved: number) => (el.textContent = [...text].map((c, i) => (i < resolved || c === " " ? c : glyph())).join(""));
 
     if (phase === "pending") {
@@ -271,6 +273,8 @@ function Odometer({ from, to }: { from: string; to: string }) {
   const offset = (d: number) => `-${d * 5}%`;
   return (
     <span className="inline-flex tabular-nums" aria-label={to}>
+      {/* `to` is all digits (checked by FxNumber), so splitting per code point is exact. */}
+      {/* oxlint-disable-next-line typescript/no-misused-spread */}
       {[...to].map((d, i) => {
         const a = Number(old[i]);
         const b = Number(d);

@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vite-plus/test";
 
 import { handleAuth, sessionLogin, unauthenticated } from "./auth";
 import { hmacHex, signSession, verifySession, verifyWebhook } from "./crypto";
@@ -53,7 +53,7 @@ describe("OAuth callback", () => {
 
   function github(login: string) {
     return vi.fn(async (input: RequestInfo | URL) => {
-      const url = String(input);
+      const url = input instanceof Request ? input.url : String(input);
       if (url.endsWith("/login/oauth/access_token")) {
         return Response.json({ access_token: "ghu_x", expires_in: 28800, refresh_token: "ghr_y", refresh_token_expires_in: 15811200 });
       }

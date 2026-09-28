@@ -161,6 +161,8 @@ function Kbd({ children }: { children: ReactNode }) {
 
 function ShortcutsDialog({ ref, enabled }: { ref: React.Ref<HTMLDialogElement>; enabled: boolean }) {
   return (
+    // Keyboard users close it with Esc, which <dialog> handles natively; the backdrop click is a mouse extra.
+    // oxlint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-noninteractive-element-interactions
     <dialog
       ref={ref}
       id="shortcuts"

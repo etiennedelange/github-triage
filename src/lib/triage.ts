@@ -302,7 +302,9 @@ export const secretScanningAlert = z
 
 export type AlertSource = "dependabot" | "code-scanning" | "secret-scanning";
 export type SecurityAlert = (
-  z.output<typeof dependabotAlert> | z.output<typeof codeScanningAlert> | z.output<typeof secretScanningAlert>
+  | z.output<typeof dependabotAlert>
+  | z.output<typeof codeScanningAlert>
+  | z.output<typeof secretScanningAlert>
 ) & { repo: string };
 
 /** Why a scanner produced no data for a repo, so the UI can say so instead of showing a false zero. */
