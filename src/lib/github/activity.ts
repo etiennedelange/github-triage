@@ -1,7 +1,8 @@
-// Stars on your repos and your followers, in one GraphQL round trip. GitHub documents a
-// timestamp for stars but not follows, and sends Apps no follow webhook. Follower cursors
-// happen to carry the follow time (`followedAt`); when one doesn't, the time the Hub first
-// saw the follower stands in (`diffFollowers`).
+// Stars and watchers on your repos and your followers, in one GraphQL round trip. GitHub
+// documents a timestamp for stars only, and sends Apps no follow or watch webhook (its
+// "watch" event is really a star). Follower cursors happen to carry the follow time
+// (`followedAt`); for watchers, and followers whose cursor doesn't, the time the Hub first
+// saw them stands in (`diffSeen`).
 
 import { z } from "zod";
 
@@ -9,6 +10,8 @@ import { graphql, type GitHubAuth } from "./http";
 
 /** Latest stars per repo; older ones rarely matter for "who starred me lately". */
 const STARS_PER_REPO = 10;
+/** Watchers aren't ordered by time, so read enough to see newcomers on a busy repo. */
+const WATCHERS_PER_REPO = 50;
 /** Events kept for the panel, newest first. */
 export const ACTIVITY_KEPT = 30;
 
@@ -18,21 +21,23 @@ export type ActivityUser = z.infer<typeof user>;
 export type ActivityEvent =
   | { kind: "star"; at: string; user: ActivityUser; repo: string }
   /** `exact: false`: `at` is when the Hub first saw the follower, not when they followed. */
-  | { kind: "follow"; at: string; user: ActivityUser; exact: boolean };
+  | { kind: "follow"; at: string; user: ActivityUser; exact: boolean }
+  /** `at` is always when the Hub first saw the watcher: GitHub keeps no time for it. */
+  | { kind: "watch"; at: string; user: ActivityUser; repo: string };
 
 export type Activity = {
   events: ActivityEvent[];
   followers: number;
   stars: number;
-  /** Follows without a known time from before this were there when tracking began: not listed. */
-  followersTrackedSince: string;
+  /** Other people watching your repos (GitHub counts you as watching your own). */
+  watchers: number;
   /** GitHub refused part of the query (e.g. a permission the App lacks); the rest still shows. */
   warning?: string;
   fetchedAt: string;
 };
 
 const QUERY = `
-query ($after: String, $withRepos: Boolean!, $stars: Int!) {
+query ($after: String, $withRepos: Boolean!, $stars: Int!, $watchers: Int!) {
   viewer {
     login
     followers(first: 100, after: $after) { totalCount pageInfo { hasNextPage endCursor } edges { cursor node { login avatarUrl url } } }
@@ -41,6 +46,7 @@ query ($after: String, $withRepos: Boolean!, $stars: Int!) {
         nameWithOwner
         stargazerCount
         stargazers(first: $stars, orderBy: { field: STARRED_AT, direction: DESC }) { edges { starredAt node { login avatarUrl url } } }
+        watchers(first: $watchers) { totalCount nodes { login avatarUrl url } }
       }
     }
   }
@@ -67,6 +73,7 @@ const response = z.object({
               stargazers: z
                 .object({ edges: z.array(z.object({ starredAt: z.string(), node: user.nullable() }).nullable()) })
                 .nullish(),
+              watchers: z.object({ totalCount: z.number(), nodes: z.array(user.nullable()) }).nullish(),
             })
             .nullable(),
         ),
@@ -82,25 +89,38 @@ export type Snapshot = {
   followerCount: number;
   stars: Extract<ActivityEvent, { kind: "star" }>[];
   starCount: number;
+  watchers: Omit<Extract<ActivityEvent, { kind: "watch" }>, "at">[];
+  watcherCount: number;
+  /** False when GitHub refused that part: an empty list then means "unknown", not "nobody". */
+  complete: { followers: boolean; watchers: boolean };
   warning?: string;
 };
 
-/** Your followers (up to 1,000) and the latest stars on each of your repos (up to 100 repos). */
+/** Your followers (up to 1,000), and the latest stars and some watchers on each of your repos (up to 100 repos). */
 export async function fetchSnapshot(auth: GitHubAuth): Promise<Snapshot> {
   const warnings = new Set<string>();
   const opts = { partial: true, onErrors: (m: string) => void warnings.add(m) };
-  const first = response.parse(await graphql(auth, QUERY, { after: null, withRepos: true, stars: STARS_PER_REPO }, opts));
+  const first = response.parse(await graphql(auth, QUERY, { after: null, withRepos: true, stars: STARS_PER_REPO, watchers: WATCHERS_PER_REPO }, opts));
   type Edge = { cursor: string; node: ActivityUser | null } | null;
+  let followersComplete = Boolean(first.viewer.followers);
   const toFollowers = (edges: Edge[] = []): Follower[] =>
-    edges.flatMap((e) => (e?.node ? [{ ...e.node, followedAt: followedAt(e.cursor) }] : []));
+    edges.flatMap((e) => {
+      if (!e?.node) followersComplete = false;
+      return e?.node ? [{ ...e.node, followedAt: followedAt(e.cursor) }] : [];
+    });
   const followers = toFollowers(first.viewer.followers?.edges);
   let page = first.viewer.followers?.pageInfo;
   for (let i = 1; i < 10 && page?.hasNextPage; i++) {
-    const next = response.parse(await graphql(auth, QUERY, { after: page.endCursor, withRepos: false, stars: 0 }, opts));
+    const next = response.parse(await graphql(auth, QUERY, { after: page.endCursor, withRepos: false, stars: 0, watchers: 0 }, opts));
+    if (!next.viewer.followers) followersComplete = false;
     followers.push(...toFollowers(next.viewer.followers?.edges));
     page = next.viewer.followers?.pageInfo;
   }
   const repos = (first.viewer.repositories?.nodes ?? []).filter((r) => r !== null);
+  const me = first.viewer.login;
+  const watchers = repos.flatMap((r) =>
+    (r.watchers?.nodes ?? []).flatMap((u) => (u && u.login !== me ? [{ kind: "watch", user: u, repo: r.nameWithOwner } as const] : [])),
+  );
   return {
     followers,
     followerCount: first.viewer.followers?.totalCount ?? followers.length,
@@ -108,10 +128,17 @@ export async function fetchSnapshot(auth: GitHubAuth): Promise<Snapshot> {
     // Your own stars aren't news; the total is GitHub's and still counts them.
     stars: repos.flatMap((r) =>
       (r.stargazers?.edges ?? []).flatMap((e) =>
-        e?.node && e.node.login !== first.viewer.login ? [{ kind: "star", at: e.starredAt, user: e.node, repo: r.nameWithOwner } as const] : [],
+        e?.node && e.node.login !== me ? [{ kind: "star", at: e.starredAt, user: e.node, repo: r.nameWithOwner } as const] : [],
       ),
     ),
     starCount: repos.reduce((n, r) => n + r.stargazerCount, 0),
+    watchers,
+    complete: {
+      followers: followersComplete,
+      watchers: Boolean(first.viewer.repositories) && repos.every((r) => r.watchers && !r.watchers.nodes.includes(null)),
+    },
+    // Minus yourself on each repo you watch (you do by default).
+    watcherCount: repos.reduce((n, r) => n + (r.watchers?.totalCount ?? 0) - (r.watchers?.nodes.some((u) => u?.login === me) ? 1 : 0), 0),
   };
 }
 
@@ -128,25 +155,32 @@ export function followedAt(cursor: string): string | null {
   }
 }
 
-/** login → when the Hub first saw them follow you; null for those already following when tracking began. */
-export type SeenFollowers = Record<string, string | null>;
+/** key → when the Hub first saw it; null for what was already there when tracking began. */
+export type Seen = Record<string, string | null>;
+
+/** Followers by login; watchers by "owner/repo login". */
+export const watcherKey = (w: { repo: string; user: ActivityUser }) => `${w.repo} ${w.user.login}`;
 
 /**
- * The follower set now, with first-seen times carried over. With nothing seen before, everyone
- * is the baseline (null): we can't tell when they followed. Unfollowers drop out, so a
- * refollow counts as new.
+ * The set now, with first-seen times carried over. With nothing seen before, everything is
+ * the baseline (null): we can't tell when it happened. Whatever left drops out, so a
+ * refollow or rewatch counts as new.
  */
-export function diffFollowers(prev: SeenFollowers | undefined, current: ActivityUser[], now: string): SeenFollowers {
-  const next: SeenFollowers = {};
-  for (const { login } of current) next[login] = prev ? (login in prev ? prev[login] : now) : null;
+export function diffSeen(prev: Seen | undefined, current: string[], now: string): Seen {
+  const next: Seen = {};
+  for (const key of current) next[key] = prev ? (key in prev ? prev[key] : now) : null;
   return next;
 }
 
-export function toActivity(snap: Snapshot, seen: SeenFollowers, trackedSince: string, fetchedAt: string): Activity {
+export function toActivity(snap: Snapshot, seen: { followers: Seen; watchers: Seen }, fetchedAt: string): Activity {
   const follows = snap.followers.flatMap(({ followedAt, ...user }): ActivityEvent[] => {
-    const at = followedAt ?? seen[user.login];
+    const at = followedAt ?? seen.followers[user.login];
     return at ? [{ kind: "follow", at, user, exact: Boolean(followedAt) }] : [];
   });
-  const events = [...snap.stars, ...follows].toSorted((a, b) => b.at.localeCompare(a.at)).slice(0, ACTIVITY_KEPT);
-  return { events, followers: snap.followerCount, stars: snap.starCount, followersTrackedSince: trackedSince, warning: snap.warning, fetchedAt };
+  const watches = snap.watchers.flatMap((w): ActivityEvent[] => {
+    const at = seen.watchers[watcherKey(w)];
+    return at ? [{ ...w, at }] : [];
+  });
+  const events = [...snap.stars, ...follows, ...watches].toSorted((a, b) => b.at.localeCompare(a.at)).slice(0, ACTIVITY_KEPT);
+  return { events, followers: snap.followerCount, stars: snap.starCount, watchers: snap.watcherCount, warning: snap.warning, fetchedAt };
 }

@@ -186,10 +186,11 @@ function ActivityPanel({ repo, oauth }: { repo?: string; oauth: boolean }) {
       </Panel>
     );
   }
-  const { events, stars, followers, followersTrackedSince, warning } = result.data;
-  // A repo filter keeps that repo's stars; follows aren't about any repo.
-  const shown = repo ? events.filter((e) => e.kind === "star" && e.repo === repo) : events;
-  const unknownFollows = events.some((e) => e.kind === "follow" && !e.exact);
+  const { events, stars, followers, watchers, warning } = result.data;
+  // A repo filter keeps that repo's stars and watchers; follows aren't about any repo.
+  const shown = repo ? events.filter((e) => e.kind !== "follow" && e.repo === repo) : events;
+  const firstSeen = shown.some((e) => e.kind === "watch" || (e.kind === "follow" && !e.exact));
+  const plural = (n: number, one: string, many: string) => `${n.toLocaleString()} ${n === 1 ? one : many}`;
   return (
     <Panel
       quiet
@@ -197,13 +198,12 @@ function ActivityPanel({ repo, oauth }: { repo?: string; oauth: boolean }) {
       icon={Star}
       title="Stars & followers"
       count={shown.length}
-      empty={repo ? "No stars on this repo yet." : "No stars or followers yet."}
+      empty={repo ? "No stars or new watchers on this repo yet." : "No stars, followers or new watchers yet."}
       footer={
         <div className="space-y-1">
           <p>
-            {stars.toLocaleString()} {stars === 1 ? "star" : "stars"} across your repos · {followers.toLocaleString()}{" "}
-            {followers === 1 ? "follower" : "followers"}
-            {unknownFollows && ` · "first seen" follows are dated from when this dashboard noticed them (tracking since ${new Date(followersTrackedSince).toLocaleDateString()})`}
+            {plural(stars, "star", "stars")} · {plural(watchers, "watcher", "watchers")} across your repos · {plural(followers, "follower", "followers")}
+            {firstSeen && " · GitHub keeps no date for watches (or some follows): \"first seen\" is when this dashboard noticed them"}
           </p>
           {warning && (
             <p role="status" className={cn("flex items-start gap-1 rounded-md px-1.5 py-1 break-words", TONE.warning)}>

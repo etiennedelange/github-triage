@@ -1,7 +1,7 @@
 import { DurableObject } from "cloudflare:workers";
 
 import { GitHubError, mapLimit, type GitHubAuth } from "@/lib/github/http";
-import { diffFollowers, fetchSnapshot, toActivity, type Activity, type SeenFollowers } from "@/lib/github/activity";
+import { diffSeen, fetchSnapshot, toActivity, watcherKey, type Activity, type Seen } from "@/lib/github/activity";
 import { fetchInbox, fetchRateLimits, fetchViewerLogin, type Inbox, type RateLimits } from "@/lib/github/inbox";
 import { asResult, MissingTokenError, ScanPendingError, type Result } from "@/lib/github/result";
 import { listInstalledRepos, listOwnedRepos, scanOne, SCANNERS, type SecurityReport } from "@/lib/github/security";
@@ -145,17 +145,22 @@ export class Hub extends DurableObject<EdgeEnv> {
     });
   }
 
-  /** Stars and follows, from storage for five minutes; `force` (Refresh) refetches. */
+  /** Stars, follows and watches, from storage for five minutes; `force` (Refresh) refetches. */
   getActivity(force = false): Promise<Result<Activity>> {
     return asResult(async () => {
       const cached = await this.ctx.storage.get<Activity>("activity");
       if (!force && cached && Date.now() - Date.parse(cached.fetchedAt) < ACTIVITY_MAX_AGE_MS) return cached;
       const fetchedAt = new Date().toISOString();
       const snap = await this.withAuth(fetchSnapshot);
-      const prev = await this.ctx.storage.get<{ since: string; seen: SeenFollowers }>("followers");
-      const followers = { since: prev?.since ?? fetchedAt, seen: diffFollowers(prev?.seen, snap.followers, fetchedAt) };
-      const activity = toActivity(snap, followers.seen, followers.since, fetchedAt);
-      await this.ctx.storage.put({ followers, activity });
+      // A refused or cut-short list reads as "nobody": keep what we'd seen, or all would come back as new.
+      const prev = await this.ctx.storage.get<{ seen: Seen }>("followers");
+      const prevWatchers = await this.ctx.storage.get<{ seen: Seen }>("watchers");
+      const followers =
+        !snap.complete.followers && prev ? prev : { seen: diffSeen(prev?.seen, snap.followers.map((f) => f.login), fetchedAt) };
+      const watchers =
+        !snap.complete.watchers && prevWatchers ? prevWatchers : { seen: diffSeen(prevWatchers?.seen, snap.watchers.map(watcherKey), fetchedAt) };
+      const activity = toActivity(snap, { followers: followers.seen, watchers: watchers.seen }, fetchedAt);
+      await this.ctx.storage.put({ followers, watchers, activity });
       return activity;
     });
   }
