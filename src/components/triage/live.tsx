@@ -1,7 +1,7 @@
 import { CircleArrowUp } from "lucide-react";
 import { useEffect, useState, useSyncExternalStore } from "react";
 
-import { queryClient, refreshAll, useInbox } from "@/client/api";
+import { queryClient, refreshAll, useDeployedBuild, useInbox } from "@/client/api";
 import { Button } from "@/components/ui/button";
 import { serverEnvelope, type ServerMessage } from "@/edge/protocol";
 import type { AlertPatch, ItemPatch } from "@/lib/live";
@@ -299,7 +299,8 @@ export function LiveStatus() {
 /** Shown once a newer build is deployed: this tab keeps working, but reloading picks up the new one. */
 export function NewVersion() {
   const { outdated } = useLive();
-  if (!outdated) return null;
+  const deployed = useDeployedBuild().data?.build;
+  if (!outdated && (deployed === undefined || deployed === __BUILD_ID__)) return null;
   return (
     <Button size="sm" title="A new version of GitHub Triage was deployed. Reload to use it." onClick={() => location.reload()}>
       <CircleArrowUp data-icon="inline-start" />

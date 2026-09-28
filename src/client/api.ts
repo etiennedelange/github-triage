@@ -29,6 +29,19 @@ async function json<T>(res: ClientResponse<T>): Promise<T> {
 export const useSession = () =>
   useQuery({ queryKey: ["session"], queryFn: async () => json(await api.session.$get()), staleTime: Infinity });
 
+/**
+ * The deployed build, checked on focus and every few minutes. The live socket reports it too, but
+ * only when it reconnects, and a reconnect during a deploy can still reach the old version.
+ */
+export const useDeployedBuild = () =>
+  useQuery({
+    queryKey: ["version"],
+    queryFn: async () => json(await api.version.$get()),
+    refetchInterval: 5 * 60_000,
+    refetchOnWindowFocus: true,
+    staleTime: 0,
+  });
+
 export const useInbox = () => useQuery({ queryKey: ["inbox"], queryFn: async () => json(await api.inbox.$get()) });
 
 /** Stars arrive live (a webhook invalidates this); follows have no webhook, so poll for them. */
