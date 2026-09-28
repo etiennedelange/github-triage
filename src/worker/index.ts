@@ -36,6 +36,7 @@ const api = new Hono<AppEnv>()
   // session, so without this any page open in your browser could post a form here.
   .use(csrf())
   .get("/session", (c) => c.json({ login: c.get("login"), oauth: Boolean(c.env.GITHUB_CLIENT_ID) }))
+  .get("/version", (c) => c.json({ build: __BUILD_ID__ }))
   .get("/inbox", async (c) => c.json(await hub(c.env).getInbox()))
   .get("/security", async (c) => c.json(await hub(c.env).getSecurity()))
   .get("/activity", async (c) => c.json(await hub(c.env).getActivity()))
