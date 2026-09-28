@@ -37,12 +37,13 @@ import { ClaudeAction, ClaudeStatusPill } from "./claude";
 import { cn } from "@/lib/utils";
 
 export const TONE = {
-  danger: "bg-destructive/10 text-destructive",
-  orange: "bg-orange/12 text-orange",
-  warning: "bg-warning/15 text-warning",
-  success: "bg-success/12 text-success",
-  info: "bg-info/12 text-info",
-  muted: "bg-muted text-muted-foreground",
+  // Outlined, not tinted: coloured text on a tint of itself fell under 4.5:1 on the elevated panels.
+  danger: "border border-destructive/45 text-destructive",
+  orange: "border border-orange/55 text-orange-text",
+  warning: "border border-warning/55 text-warning-text",
+  success: "border border-success/55 text-success-text",
+  info: "border border-info/45 text-info",
+  muted: "border text-muted-foreground",
 } as const;
 export type Tone = keyof typeof TONE;
 
@@ -129,7 +130,7 @@ function RepoLink({ repo }: { repo: string }) {
 function Age({ iso, verb = "updated", flagStale = true }: { iso: string; verb?: string; flagStale?: boolean }) {
   const stale = flagStale && isStale(iso);
   return (
-    <time dateTime={iso} title={`${verb} ${new Date(iso).toLocaleString()}`} className={cn(stale && "text-orange")}>
+    <time dateTime={iso} title={`${verb} ${new Date(iso).toLocaleString()}`} className={cn(stale && "text-orange-text")}>
       {relativeAge(iso)}
       {stale && " · stale"}
     </time>
@@ -258,7 +259,7 @@ export function PrRow({ pr, perspective, live }: LiveProp & { pr: PullRequest; p
         <>
           <CommonMeta item={pr} />
           <span className="font-mono">
-            <span className="text-success">+{pr.additions}</span> <span className="text-destructive">−{pr.deletions}</span>
+            <span className="text-success-text">+{pr.additions}</span> <span className="text-destructive">−{pr.deletions}</span>
           </span>
         </>
       }

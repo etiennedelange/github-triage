@@ -282,7 +282,7 @@ export function LiveStatus() {
     <span
       role="status"
       title={status === "offline" && since ? `${LABEL.offline} Last current ${since}.` : LABEL[status]}
-      className={cn("inline-flex items-center gap-1.5 text-xs", status === "offline" ? "text-orange" : "text-muted-foreground")}
+      className={cn("inline-flex items-center gap-1.5 text-xs", status === "offline" ? "text-orange-text" : "text-muted-foreground")}
     >
       <span
         data-status={status}

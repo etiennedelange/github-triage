@@ -1,5 +1,3 @@
-import "@fontsource-variable/inter";
-import "@fontsource-variable/geist-mono";
 import "./globals.css";
 
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -17,7 +15,13 @@ createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <AppErrorBoundary>
       <QueryClientProvider client={queryClient}>
-        <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
+        <ThemeProvider
+          attribute="data-ground"
+          value={{ light: "snow-storm", dark: "nord" }}
+          defaultTheme="system"
+          enableSystem
+          disableTransitionOnChange
+        >
           <TooltipProvider delayDuration={300}>
             <App />
           </TooltipProvider>

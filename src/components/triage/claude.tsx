@@ -122,7 +122,7 @@ function AskClaude({ issue }: { issue: Issue }) {
             className="w-full resize-y rounded-md border bg-background px-2 py-1.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
           />
         </label>
-        {!draft.includes(TRIGGER) && <p className="text-xs text-orange">The Action only answers comments containing {TRIGGER}.</p>}
+        {!draft.includes(TRIGGER) && <p className="text-xs text-orange-text">The Action only answers comments containing {TRIGGER}.</p>}
         {error && (
           <p role="alert" className="text-xs text-destructive">
             {error}
@@ -145,7 +145,7 @@ function SetupLine({ setup, repo }: { setup: ReturnType<typeof useClaudeSetup>; 
   if (!setup.data.ok) return <p className="text-xs text-destructive">Couldn't check the repo's workflows: {describe(setup.data.error)}</p>;
   if (setup.data.data) return null;
   return (
-    <p className="text-xs text-orange">
+    <p className="text-xs text-orange-text">
       No workflow in {repo} uses the Claude Action, so nothing would answer. Set it up by running{" "}
       <code className="font-mono">/install-github-app</code> in Claude Code in that repo.
     </p>
