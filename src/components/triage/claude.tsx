@@ -5,7 +5,7 @@ import { requestClaude, useClaudeRuns, useClaudeSetup } from "@/client/api";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { claudeKey, defaultPrompt, runLink, TRIGGER, type ClaudeRun, type ClaudeState } from "@/lib/claude";
+import { claudeKey, defaultPrompt, runLink, TRIGGER, type ClaudeRun, type ClaudeState, type ClaudeStatus } from "@/lib/claude";
 import type { Failure } from "@/lib/github/result";
 import type { Issue } from "@/lib/triage";
 
@@ -18,7 +18,33 @@ import { Pill, type Tone } from "./rows";
 export function ClaudeAction({ issue }: { issue: Issue }) {
   const { data } = useClaudeRuns();
   const run = data?.ok ? data.data[claudeKey(issue.repo, issue.number)] : undefined;
-  return run ? <RunPill run={run} /> : <AskClaude issue={issue} />;
+  if (run) return <RunPill run={run} />;
+  return (
+    <>
+      {issue.claude && <ClaudeStatusPill status={issue.claude} />}
+      <AskClaude issue={issue} />
+    </>
+  );
+}
+
+const STATUS: Record<ClaudeStatus["state"], { label: string; tone: Tone; hint: string }> = {
+  asked: { label: "Asked Claude", tone: "muted", hint: "An @claude comment is waiting for the Claude Action to pick it up" },
+  working: { label: "Claude working", tone: "info", hint: "The Claude Action is working on the latest @claude request" },
+  done: { label: "Claude replied", tone: "success", hint: "The Claude Action finished the latest @claude request" },
+  error: { label: "Claude failed", tone: "danger", hint: "The Claude Action hit an error on the latest @claude request" },
+};
+
+/** Where the newest @claude comment on a PR or issue has got, whoever posted it and wherever. */
+export function ClaudeStatusPill({ status }: { status: ClaudeStatus }) {
+  const s = STATUS[status.state];
+  return (
+    <a href={status.url} target="_blank" rel="noreferrer" title={s.hint} className="hover:opacity-80">
+      <Pill tone={s.tone}>
+        <Sparkles aria-hidden className="mr-1 size-3" />
+        {s.label}
+      </Pill>
+    </a>
+  );
 }
 
 const STATE: Record<ClaudeState, { label: string; tone: Tone; hint: string }> = {

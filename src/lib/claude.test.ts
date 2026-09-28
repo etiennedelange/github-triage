@@ -6,12 +6,14 @@ import {
   claudeBranchIssue,
   claudeBranchTime,
   claudeKey,
+  claudeStatus,
   isActiveRun,
   pruneRuns,
   runLink,
   usesClaudeAction,
   type ClaudeRun,
   type ClaudeRuns,
+  type ItemComment,
 } from "./claude";
 
 const run: ClaudeRun = {
@@ -79,5 +81,46 @@ describe("Claude Action detection", () => {
     expect(usesClaudeAction("steps:\n  - uses: anthropics/claude-code-action@v1\n")).toBe(true);
     expect(usesClaudeAction("- uses: 'anthropics/claude-code-action@beta'")).toBe(true);
     expect(usesClaudeAction("# see anthropics/claude-code-action for setup\n- uses: actions/checkout@v4")).toBe(false);
+  });
+});
+
+describe("@claude from an item's comments", () => {
+  const c = (author: string, body: string, createdAt: string, bot = author.endsWith("[bot]")): ItemComment => ({
+    author,
+    bot,
+    url: `https://github.com/Acme/api/pull/7#${author}-${createdAt}`,
+    createdAt,
+    updatedAt: createdAt,
+    body,
+  });
+  const preview = c("cloudflare-workers-and-pages[bot]", "Deploying Preview to Cloudflare", "2026-09-28T10:00:00Z");
+  const ask = c("me", "@claude review", "2026-09-28T10:01:00Z");
+
+  it("is nothing without a request or a reply", () => {
+    expect(claudeStatus([])).toBeUndefined();
+    expect(claudeStatus([preview])).toBeUndefined();
+  });
+
+  it("follows the tracking comment through to done or error", () => {
+    expect(claudeStatus([preview, ask])).toMatchObject({
+      state: "asked",
+      url: ask.url,
+    });
+    const tracking = c("claude[bot]", "Claude Code is working…", "2026-09-28T10:01:30Z");
+    expect(claudeStatus([preview, ask, tracking])).toMatchObject({
+      state: "working",
+      url: tracking.url,
+    });
+    expect(claudeStatus([ask, { ...tracking, body: "Claude finished @me's task in 1m 2s" }])?.state).toBe("done");
+    expect(claudeStatus([ask, { ...tracking, body: "Claude encountered an error after 10s" }])?.state).toBe("error");
+    // The request itself scrolled out of the window: the reply still says where it got.
+    expect(claudeStatus([tracking, preview])?.state).toBe("working");
+  });
+
+  it("treats a newer request as waiting, not the older reply", () => {
+    const done = c("claude[bot]", "Claude finished @me's task", "2026-09-28T09:00:00Z");
+    expect(claudeStatus([done, ask])?.state).toBe("asked");
+    // Bots quoting "@claude" aren't requests.
+    expect(claudeStatus([done, c("some[bot]", "cc @claude", "2026-09-28T10:02:00Z")])?.state).toBe("done");
   });
 });
