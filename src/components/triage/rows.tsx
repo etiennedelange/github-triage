@@ -4,6 +4,7 @@ import {
   CircleDot,
   CircleX,
   Code,
+  Eye,
   GitPullRequest,
   GitPullRequestDraft,
   KeyRound,
@@ -262,27 +263,29 @@ export function AlertRow({ alert, live }: LiveProp & { alert: SecurityAlert }) {
   );
 }
 
-/** A star on one of your repos, or a new follower. Links to the person. */
+/** A star or new watcher on one of your repos, or a new follower. Links to the person. */
 export function ActivityRow({ event }: { event: ActivityEvent }) {
-  const star = event.kind === "star";
-  const Icon = star ? Star : UserPlus;
+  const { icon: Icon, verb, className } = ACTIVITY[event.kind];
+  const firstSeen = event.kind === "watch" || (event.kind === "follow" && !event.exact);
   return (
     <Row
       icon={<img src={event.user.avatarUrl} alt="" width={16} height={16} className="size-4 rounded-full" />}
-      title={`${event.user.login} ${star ? "starred" : "followed you"}`}
+      title={`${event.user.login} ${verb}`}
       url={event.user.url}
       meta={
         <>
-          <Icon aria-hidden className={cn("size-3", star && "text-warning")} />
-          {star && <RepoLink repo={event.repo} />}
-          <Age
-            iso={event.at}
-            verb={star ? "starred" : event.exact ? "followed" : "first seen following"}
-            flagStale={false}
-          />
-          {!star && !event.exact && <span>(first seen)</span>}
+          <Icon aria-hidden className={cn("size-3", className)} />
+          {event.kind !== "follow" && <RepoLink repo={event.repo} />}
+          <Age iso={event.at} verb={firstSeen ? "first seen" : verb} flagStale={false} />
+          {firstSeen && <span>(first seen)</span>}
         </>
       }
     />
   );
 }
+
+const ACTIVITY: Record<ActivityEvent["kind"], { icon: typeof Star; verb: string; className?: string }> = {
+  star: { icon: Star, verb: "starred", className: "text-warning" },
+  follow: { icon: UserPlus, verb: "followed you" },
+  watch: { icon: Eye, verb: "is watching" },
+};

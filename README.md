@@ -43,7 +43,7 @@ The scan runs in the background in small batches, never inside a page request: s
 
 ### Stars & followers
 
-The **Stars & followers** panel lists the latest stars on repos you own and your newest followers, from one GraphQL request. Stars carry GitHub's timestamp and arrive live through the Star webhook. GitHub has no follow webhook and doesn't document follow times, so followers are checked every five minutes. Their follow time is read from GitHub's follower cursor, which happens to encode it; if that ever stops working, a follower is dated from when the dashboard first saw them.
+The **Stars & followers** panel lists the latest stars and new watchers on repos you own and your newest followers, from one GraphQL request. Stars carry GitHub's timestamp and arrive live through the Star webhook. GitHub has no follow webhook and doesn't document follow times, so followers are checked every five minutes. Their follow time is read from GitHub's follower cursor, which happens to encode it; if that ever stops working, a follower is dated from when the dashboard first saw them. Watchers have neither a webhook nor any date, so they're always dated from when the dashboard first saw them; people already watching when tracking started aren't listed.
 
 ### Caching
 
