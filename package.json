@@ -2,6 +2,7 @@
   "name": "github-triage",
   "version": "0.1.0",
   "private": true,
+  "license": "FSL-1.1-MIT",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
