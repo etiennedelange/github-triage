@@ -360,3 +360,37 @@ export function branches() {
     },
   };
 }
+
+/** Stars & followers: a few stars and watchers on your own repos, and two followers. */
+export function activity() {
+  const person = (login: string) => ({ login, avatarUrl: "http://127.0.0.1:4010/avatar.svg", url: `https://github.com/${login}` });
+  return {
+    viewer: {
+      login: VIEWER,
+      followers: {
+        totalCount: 2,
+        pageInfo: { hasNextPage: false, endCursor: null },
+        edges: [
+          { cursor: "Y3Vyc29yOjE=", node: person("jamie-q") },
+          { cursor: "Y3Vyc29yOjI=", node: person("morgan-ng") },
+        ],
+      },
+      repositories: {
+        nodes: [
+          {
+            nameWithOwner: "demo/dotfiles",
+            stargazerCount: 3,
+            stargazers: {
+              edges: [
+                { starredAt: ago(5), node: person("riley") },
+                { starredAt: ago(30), node: person("sam-ortiz") },
+                { starredAt: ago(24 * 6), node: person("alex-k") },
+              ],
+            },
+            watchers: { totalCount: 2, nodes: [person(VIEWER), person("riley")] },
+          },
+        ],
+      },
+    },
+  };
+}
