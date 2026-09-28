@@ -1,5 +1,7 @@
-import { CircleDot, Eye, GitPullRequest, GitPullRequestArrow, Inbox as InboxIcon, ShieldAlert } from "lucide-react";
+import { CircleCheck, CircleDot, Eye, GitPullRequest, GitPullRequestArrow, Inbox as InboxIcon, ShieldAlert } from "lucide-react";
 import type { ReactNode } from "react";
+
+import { useSecurity } from "@/client/api";
 
 import type { Inbox } from "@/lib/github/inbox";
 import type { SecurityReport } from "@/lib/github/security";
@@ -21,7 +23,7 @@ import { cn } from "@/lib/utils";
 import { useLive, useLiveConnection } from "./live";
 import { MoreOnGitHub, Panel } from "./panel";
 import { FxNumber } from "./refresh-fx";
-import { AlertRow, IssueRow, Pill, PrRow, SEVERITY_TONE, TONE, type Tone } from "./rows";
+import { AlertRow, IssueRow, Pill, PrRow, SEVERITY_TONE, type Tone } from "./rows";
 
 /**
  * Row key that changes with each live update, and again when you come back to a tab that
@@ -39,7 +41,6 @@ export function LiveInbox({
   repo,
   live: enabled,
   contextLine,
-  securityStat,
   securityPanel,
   branchesPanel,
   activityPanel,
@@ -48,7 +49,6 @@ export function LiveInbox({
   repo?: string;
   live: boolean;
   contextLine: ReactNode;
-  securityStat: ReactNode;
   securityPanel: ReactNode;
   branchesPanel: ReactNode;
   activityPanel: ReactNode;
@@ -70,43 +70,41 @@ export function LiveInbox({
   const untriaged = view<Issue>("untriaged");
   const mineSorted = sortByNextStep(mine.items);
 
-  const actionable = mine.items.filter((pr) => ["fix-checks", "resolve-conflicts", "address-review"].includes(prNextStep(pr))).length;
-  const mergeable = mine.items.filter((pr) => prNextStep(pr) === "merge").length;
+  const steps = mine.items.map(prNextStep);
   const searchUrl = (kind: "pulls" | "issues", s: InboxSection) => `https://github.com/${kind}?q=${encodeURIComponent(inbox.queries[s])}`;
   const more = (kind: "pulls" | "issues", s: InboxSection, v: { fetched: number; total: number }) =>
     // null, not an element that renders nothing: the Panel draws its footer strip for any truthy value.
     repo || v.total <= v.fetched ? null : <MoreOnGitHub shown={v.fetched} total={v.total} href={searchUrl(kind, s)} />;
+  const where = repo ? ` in ${repo}` : "";
 
-  // Ordered by what's waiting on you: your queue first, then the lists that are just for your information.
+  // What's waiting on you first, in the order you'd act on it; then lists that are just for your information.
   return (
     <div className="space-y-3">
       {contextLine}
 
-      <nav aria-label="Sections" className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6">
-        <Stat href="#review" label="Needs your review" value={review.total} tone={review.items.length ? "info" : undefined} />
-        <Stat
-          href="#mine"
-          label="Your pull requests"
-          value={mine.total}
-          sub={[actionable && `${actionable} need you`, mergeable && `${mergeable} mergeable`].filter(Boolean).join(" · ")}
-          tone={actionable ? "orange" : mergeable ? "success" : undefined}
-        />
-        {securityStat}
-        <Stat href="#assigned" label="Assigned to you" value={assigned.total} />
-        <Stat href="#incoming" label="Incoming pull requests" value={incoming.total} />
-        <Stat href="#untriaged" label="Untriaged issues" value={untriaged.total} tone={untriaged.items.length ? "warning" : undefined} />
-      </nav>
+      <WaitingOnYou
+        repo={repo}
+        pr={{
+          failing: steps.filter((s) => s === "fix-checks").length,
+          conflicts: steps.filter((s) => s === "resolve-conflicts").length,
+          changes: steps.filter((s) => s === "address-review").length,
+          mergeable: steps.filter((s) => s === "merge").length,
+        }}
+        reviews={review.items.length}
+        assigned={assigned.items.length}
+      />
 
       <RepoChips lists={[review.all, mine.all, incoming.all, assigned.all, untriaged.all]} active={repo} />
 
-      {/* items-start: a short panel stays short instead of stretching to its neighbour's height. */}
-      <div id="panels" tabIndex={-1} className="grid scroll-mt-4 items-start gap-3 outline-none lg:grid-cols-2">
+      {/* One flow in urgency order (what waits on you, then FYI), poured into two balanced
+          columns: fixed lanes left a hole under whichever lane had less in it that day. */}
+      <div id="panels" tabIndex={-1} className="scroll-mt-4 gap-3 outline-none lg:columns-2 [&>*]:mb-3 [&>*]:break-inside-avoid">
         <Panel
           id="review"
           icon={Eye}
           title="Needs your review"
           count={review.items.length}
-          empty="No reviews waiting on you."
+          empty={`No reviews waiting on you${where}.`}
           footer={more("pulls", "review", review)}
         >
           {review.items.map((pr) => (
@@ -123,7 +121,7 @@ export function LiveInbox({
           icon={GitPullRequest}
           title="Your pull requests"
           count={mine.items.length}
-          empty="No open pull requests."
+          empty={`No open pull requests${where}.`}
           footer={more("pulls", "mine", mine)}
         >
           {mineSorted.map((pr) => (
@@ -141,7 +139,7 @@ export function LiveInbox({
           icon={CircleDot}
           title="Assigned to you"
           count={assigned.items.length}
-          empty="No issues assigned to you."
+          empty={`No issues assigned to you${where}.`}
           footer={more("issues", "assigned", assigned)}
         >
           {assigned.items.map((i) => (
@@ -154,7 +152,7 @@ export function LiveInbox({
           icon={GitPullRequestArrow}
           title="Incoming pull requests"
           count={incoming.items.length}
-          empty="No one else has PRs open on your repos."
+          empty={repo ? `No one else has PRs open on ${repo}.` : "No one else has PRs open on your repos."}
           footer={more("pulls", "incoming", incoming)}
         >
           {incoming.items.map((pr) => (
@@ -170,9 +168,9 @@ export function LiveInbox({
           quiet
           id="untriaged"
           icon={InboxIcon}
-          title="Untriaged issues"
+          title="Unassigned issues"
           count={untriaged.items.length}
-          empty="Every issue on your repos has an owner."
+          empty={repo ? `Every issue on ${repo} has an owner.` : "Every issue on your repos has an owner."}
           footer={more("issues", "untriaged", untriaged)}
         >
           {untriaged.items.map((i) => (
@@ -186,34 +184,87 @@ export function LiveInbox({
   );
 }
 
-export function Stat({
-  href,
-  label,
-  value,
-  sub,
-  tone,
+const TEXT: Record<Tone, string> = {
+  danger: "text-destructive",
+  orange: "text-orange",
+  warning: "text-warning",
+  success: "text-success",
+  info: "text-info",
+  muted: "text-muted-foreground",
+};
+
+type Waiting = { key: string; href: string; count: number; label: [one: string, many: string]; tone: Tone };
+
+/**
+ * The board's headline: everything waiting on you, most urgent first, as links to where it is.
+ * It replaces a strip of counts per panel, which repeated the panel headers without ranking them.
+ * Empty, it says so: an all-clear you can trust, since the security scan is part of it.
+ */
+function WaitingOnYou({
+  repo,
+  pr,
+  reviews,
+  assigned,
 }: {
-  href: string;
-  label: string;
-  value: number | string;
-  sub?: string;
-  tone?: Tone;
+  repo?: string;
+  pr: { failing: number; conflicts: number; changes: number; mergeable: number };
+  reviews: number;
+  assigned: number;
 }) {
+  const security = useSecurityCounts(repo);
+  const alerts = security.state === "ok" ? security.counts : undefined;
+  const all: Waiting[] = [
+    { key: "critical", href: "#security", count: alerts?.critical ?? 0, label: ["critical alert", "critical alerts"], tone: "danger" },
+    { key: "failing", href: "#mine", count: pr.failing, label: ["PR failing checks", "PRs failing checks"], tone: "danger" },
+    { key: "reviews", href: "#review", count: reviews, label: ["review requested", "reviews requested"], tone: "orange" },
+    {
+      key: "changes",
+      href: "#mine",
+      count: pr.changes,
+      label: ["PR with changes requested", "PRs with changes requested"],
+      tone: "orange",
+    },
+    { key: "conflicts", href: "#mine", count: pr.conflicts, label: ["PR with conflicts", "PRs with conflicts"], tone: "orange" },
+    { key: "high", href: "#security", count: alerts?.high ?? 0, label: ["high alert", "high alerts"], tone: "orange" },
+    { key: "assigned", href: "#assigned", count: assigned, label: ["issue assigned", "issues assigned"], tone: "muted" },
+    { key: "merge", href: "#mine", count: pr.mergeable, label: ["PR ready to merge", "PRs ready to merge"], tone: "success" },
+  ];
+  const waiting = all.filter((w) => w.count > 0);
+  const sig = [...waiting.map((w) => `${w.key}:${w.count}`), security.state].join("|");
+
   return (
-    <a
-      href={href}
-      data-fx-panel
-      data-fx-sig={`${value}|${sub ?? ""}`}
-      className="group flex min-w-0 items-baseline gap-2 rounded-xl border bg-card px-3 py-2 transition-colors hover:bg-muted/50"
-    >
-      <span className={cn("rounded-md px-1.5 font-mono text-lg font-semibold tabular-nums", tone ? TONE[tone] : "text-foreground")}>
-        <FxNumber value={value} />
-      </span>
-      <span className="min-w-0">
-        <span className="block truncate text-xs font-medium">{label}</span>
-        {sub && <span className="block truncate text-[11px] text-muted-foreground">{sub}</span>}
-      </span>
-    </a>
+    <nav aria-label="Waiting on you" data-fx-panel data-fx-sig={sig} className="flex flex-wrap items-center gap-1.5">
+      {waiting.length === 0 && security.state === "ok" ? (
+        <p className="inline-flex items-center gap-1.5 py-1 text-sm font-medium">
+          <CircleCheck aria-hidden className="size-4 text-success" />
+          Nothing is waiting on you{repo ? ` in ${repo}` : ""}.
+        </p>
+      ) : (
+        waiting.map((w) => (
+          // Grey chrome, like the rest of the board: only the count carries the status colour.
+          <a
+            key={w.key}
+            href={w.href}
+            className="inline-flex h-7 items-center gap-1.5 rounded-lg border bg-card pr-2.5 pl-1 text-xs transition-colors hover:bg-muted/50 sm:h-8 sm:text-sm"
+          >
+            <span className={cn("rounded-md px-1.5 font-mono font-semibold tabular-nums", TEXT[w.tone])}>
+              <FxNumber value={w.count} />
+            </span>
+            <span className="font-medium">{w.label[w.count === 1 ? 0 : 1]}</span>
+          </a>
+        ))
+      )}
+      {security.state === "pending" && <span className="px-1 text-xs text-muted-foreground">Checking security alerts…</span>}
+      {security.state === "scanning" && <span className="px-1 text-xs text-muted-foreground">Security scan running…</span>}
+      {security.state === "error" && (
+        <a
+          href="#security"
+          className="inline-flex h-7 items-center rounded-lg border bg-card px-2.5 text-xs font-medium text-destructive sm:h-8 sm:text-sm"
+        >
+          Security alerts couldn't load
+        </a>
+      )}
+    </nav>
   );
 }
 
@@ -222,9 +273,14 @@ function RepoChips({ lists, active }: { lists: { repo: string }[][]; active?: st
   for (const item of lists.flat()) counts.set(item.repo, (counts.get(item.repo) ?? 0) + 1);
   const repos = [...counts].sort((a, b) => b[1] - a[1]).slice(0, 15);
   if (repos.length < 2) return null;
-  const chip = "inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs transition-colors hover:bg-muted";
+  // 32px tall on phones, where they're tapped; the fade says the strip scrolls sideways.
+  const chip =
+    "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border px-3 text-xs transition-colors hover:bg-muted sm:h-6 sm:px-2.5";
   return (
-    <nav aria-label="Filter by repository" className="-mx-4 flex gap-1.5 overflow-x-auto px-4 pb-1 sm:mx-0 sm:flex-wrap sm:px-0">
+    <nav
+      aria-label="Filter by repository"
+      className="-mx-4 flex gap-1.5 overflow-x-auto px-4 pb-1 mask-r-from-85% sm:mx-0 sm:flex-wrap sm:px-0 sm:mask-none"
+    >
       <AppLink
         href="/"
         aria-current={!active ? "page" : undefined}
@@ -255,19 +311,14 @@ function useLiveAlerts(report: SecurityReport, repo?: string) {
   return { alerts: sortAlerts(filterByRepo(o.items, repo)), live: o.live, returned };
 }
 
-export function LiveSecurityStat({ report, repo }: { report: SecurityReport; repo?: string }) {
-  const { alerts } = useLiveAlerts(report, repo);
-  const c = countBySeverity(alerts);
-  const tone: Tone | undefined = c.critical ? "danger" : c.high ? "orange" : alerts.length ? "warning" : undefined;
-  return (
-    <Stat
-      href="#security"
-      label="Security alerts"
-      value={alerts.length}
-      sub={[c.critical && `${c.critical} critical`, c.high && `${c.high} high`].filter(Boolean).join(" · ")}
-      tone={tone}
-    />
-  );
+/** Live severity counts for the headline; the scan may still be pending or running. */
+function useSecurityCounts(repo?: string) {
+  const { data: result, isPending } = useSecurity();
+  const { alerts: patches } = useLive();
+  if (isPending) return { state: "pending" as const };
+  if (!result?.ok) return { state: result?.error.kind === "scanning" ? ("scanning" as const) : ("error" as const) };
+  const o = overlayAlerts(result.data.alerts, patches, Date.parse(result.data.scannedAt));
+  return { state: "ok" as const, counts: countBySeverity(filterByRepo(o.items, repo)) };
 }
 
 /** The alert list is live; the coverage footer describes the last full scan, so the server renders it. */

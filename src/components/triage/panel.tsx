@@ -52,13 +52,14 @@ export function Panel({
           {count !== undefined && (
             <span className="rounded-md bg-muted px-1.5 font-mono text-xs tabular-nums text-muted-foreground">
               <FxNumber value={count} />
+              <span className="sr-only"> {count === 1 ? "item" : "items"}</span>
             </span>
           )}
         </span>
         {aside && <div className="ml-auto flex flex-wrap items-center justify-end gap-1.5">{aside}</div>}
       </header>
       {isEmpty ? (
-        <p className="px-3 py-6 text-center text-sm text-muted-foreground">{empty ?? "Nothing here."}</p>
+        <p className="px-3 py-3 text-sm text-muted-foreground">{empty ?? "Nothing here."}</p>
       ) : (
         <ul className="max-h-[30rem] divide-y overflow-y-auto overscroll-contain">{children}</ul>
       )}

@@ -79,23 +79,36 @@ function Row({
   meta: ReactNode;
   trailing?: ReactNode;
 }) {
+  // Desktop: title over meta, with the pills on the right. Phones: the title gets the full width and the
+  // pills share the meta line, which stays one line and fades out rather than wrapping to three or four.
   return (
-    <li data-live={live || undefined} className="flex items-start gap-2.5 px-3 py-2 transition-colors hover:bg-muted/40">
-      <span className="mt-0.5 shrink-0">{icon}</span>
-      <div className="min-w-0 flex-1">
-        <a
-          href={url}
-          target="_blank"
-          rel="noreferrer"
-          // -my-1/py-1 grow the hit target to 24px tall on single-line titles without pushing the row's layout.
-          className="-my-1 line-clamp-2 py-1 text-sm leading-snug font-medium break-words hover:underline"
-        >
-          {title}
-          {number !== undefined && <span className="ml-1 font-normal text-muted-foreground">#{number}</span>}
-        </a>
-        <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">{meta}</div>
+    <li
+      data-live={live || undefined}
+      className="group/row grid grid-cols-[auto_minmax(0,1fr)_auto] gap-x-2.5 px-3 py-2 transition-colors hover:bg-muted/40"
+    >
+      <span className="row-span-2 mt-0.5">{icon}</span>
+      <a
+        href={url}
+        target="_blank"
+        rel="noreferrer"
+        data-row-link
+        // -my-1/py-1 grow the hit target to 24px tall on single-line titles without pushing the row's layout.
+        className="col-span-2 -my-1 line-clamp-2 py-1 text-sm focus-visible:outline-offset-0 leading-snug font-medium break-words hover:underline sm:col-span-1"
+      >
+        {title}
+        {number !== undefined && <span className="ml-1 font-normal text-muted-foreground">#{number}</span>}
+      </a>
+      <div
+        // Phones: py-1.5 keeps the links' 24px hit targets inside the clip; the negative margins cancel it.
+        className="col-start-2 row-start-2 -mt-1 -mb-1.5 flex items-center gap-x-2 gap-y-0.5 overflow-hidden py-1.5 text-xs whitespace-nowrap text-muted-foreground mask-r-from-85% sm:my-0 sm:mt-0.5 sm:flex-wrap sm:overflow-visible sm:py-0 sm:whitespace-normal sm:mask-none"
+      >
+        {meta}
       </div>
-      {trailing && <div className="flex shrink-0 items-center gap-1.5 pt-0.5">{trailing}</div>}
+      {trailing && (
+        <div className="col-start-3 row-start-2 flex items-center gap-1.5 self-center pl-1 sm:row-span-2 sm:row-start-1 sm:self-start sm:pt-0.5 sm:pl-0">
+          {trailing}
+        </div>
+      )}
     </li>
   );
 }
@@ -105,7 +118,7 @@ function RepoLink({ repo }: { repo: string }) {
     <AppLink
       href={`/?repo=${encodeURIComponent(repo)}`}
       // -my-1.5/py-1.5 grow the hit target to 24px tall without pushing the row's layout.
-      className="-my-1.5 max-w-48 truncate py-1.5 font-mono hover:text-foreground hover:underline"
+      className="-my-1.5 max-w-48 shrink-0 truncate py-1.5 font-mono hover:text-foreground hover:underline"
       title={`Show only ${repo}`}
     >
       {repo}
@@ -286,7 +299,7 @@ export const SEVERITY_TONE: Record<Severity, Tone> = {
   critical: "danger",
   high: "orange",
   medium: "warning",
-  low: "info",
+  low: "muted",
   unknown: "muted",
 };
 

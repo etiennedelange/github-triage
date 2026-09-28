@@ -6,7 +6,7 @@ One pane for everything on GitHub that's waiting on you: pull requests, issues a
 
 **Light**
 
-![The dashboard in light mode: review requests, your pull requests by next step, incoming pull requests, security alerts by severity, assigned and untriaged issues](docs/screenshots/dashboard-light.png)
+![The dashboard in light mode: review requests, your pull requests by next step, incoming pull requests, security alerts by severity, assigned and unassigned issues](docs/screenshots/dashboard-light.png)
 
 **Dark**
 
@@ -19,10 +19,13 @@ One pane for everything on GitHub that's waiting on you: pull requests, issues a
 | **Incoming pull requests** | PRs from others (including Dependabot) on your repos                                                                           |
 | **Security alerts**        | Open Dependabot, code scanning and secret scanning alerts across your repos, by severity                                       |
 | **Assigned to you**        | Open issues assigned to you                                                                                                    |
-| **Untriaged issues**       | Open issues on your repos with no assignee                                                                                     |
+| **Unassigned issues**      | Open issues on your repos with no assignee                                                                                     |
 | **Stale branches**         | Branches on your repos whose PR was merged or closed, or that have no PR and no commits for 14+ days                           |
+| **Stars & followers**      | New stars and watchers on repos you own, and your newest followers                                                             |
 
-Click any repo name (or a chip) to filter everything to that repo; the filter lives in the URL (`?repo=owner/name`). Items untouched for 14+ days are marked stale.
+Above the panels, one line ranks what's waiting on you, most urgent first (critical alerts, failing checks, review requests…), or says nothing is. The panels follow in the same order: the ones that wait on you first, then the quieter ones that are just for your information.
+
+Click any repo name (or a chip) to filter everything to that repo; the filter lives in the URL (`?repo=owner/name`). Items untouched for 14+ days are marked stale. Press `?` for keyboard shortcuts (j/k between rows, 1–8 to jump to a panel, `/` for the repo filter, `r` to refresh) and what each colour means.
 
 The app only reads from GitHub, with one exception: **Fix with Claude** posts the comment you write (below).
 
@@ -52,7 +55,7 @@ The **Stale branches** panel checks up to `TRIAGE_MAX_REPOS` of your most recent
 
 ### Fix with Claude
 
-Issue rows in **Assigned to you** and **Untriaged issues** have a ✦ button. It opens a comment starting with `@claude` that you can edit, and posts it on the issue. The [Claude GitHub Action](https://github.com/anthropics/claude-code-action) then picks it up and works on a fix. When the popover opens, the Hub checks that repo's `.github/workflows` for the Action. If it's missing, the popover says so and won't post, because nothing would answer. Set the Action up by running `/install-github-app` in Claude Code in that repo.
+Issue rows in **Assigned to you** and **Unassigned issues** have an **Ask @claude** button (shown when you hover or focus the row). It opens a comment starting with `@claude` that you can edit, and posts it on the issue. The [Claude GitHub Action](https://github.com/anthropics/claude-code-action) then picks it up and works on a fix. When the popover opens, the Hub checks that repo's `.github/workflows` for the Action. If it's missing, the popover says so and won't post, because nothing would answer. Set the Action up by running `/install-github-app` in Claude Code in that repo.
 
 After you post, the row shows how far the run has got: _Asked Claude_, then _Claude working_ when `claude[bot]` comments, then _Branch ready_ when it pushes `claude/issue-<n>-…`, which links to the compare view to open the PR. If a PR is opened from that branch, the row shows _PR opened_. Progress arrives through the Issue comment, Push and Pull request webhooks. While Claude is still picking the run up or working, the tab also polls every 30 seconds. On those reads the Hub checks GitHub directly for Claude's comment, the branch and a PR from it, so runs advance in local mode (no webhooks) and after a missed delivery. It stops checking once a run reaches a PR or is a day old.
 

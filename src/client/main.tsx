@@ -18,7 +18,7 @@ createRoot(document.getElementById("root")!).render(
     <AppErrorBoundary>
       <QueryClientProvider client={queryClient}>
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
-          <TooltipProvider>
+          <TooltipProvider delayDuration={300}>
             <App />
           </TooltipProvider>
         </ThemeProvider>
