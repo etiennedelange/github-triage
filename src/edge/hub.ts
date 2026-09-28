@@ -1,7 +1,7 @@
 import { DurableObject } from "cloudflare:workers";
 
-import { advanceRun, claudeKey, pruneRuns, TRIGGER, type ClaudeRun, type ClaudeRuns, type ClaudeSignal } from "@/lib/claude";
-import { hasClaudeWorkflow, postIssueComment } from "@/lib/github/claude";
+import { advanceRun, claudeKey, isActiveRun, pruneRuns, TRIGGER, type ClaudeRun, type ClaudeRuns, type ClaudeSignal } from "@/lib/claude";
+import { fetchRunProgress, hasClaudeWorkflow, postIssueComment } from "@/lib/github/claude";
 import { GitHubError, mapLimit, type GitHubAuth } from "@/lib/github/http";
 import { diffSeen, fetchSnapshot, logStar, toActivity, watcherKey, type Activity, type Seen, type StarLog } from "@/lib/github/activity";
 import { fetchInbox, fetchRateLimits, fetchViewerLogin, type Inbox, type RateLimits } from "@/lib/github/inbox";
@@ -30,6 +30,8 @@ const DELIVERIES_KEPT = 200;
 /** Stars arrive by webhook; follows don't, so this is how late a new follower can show up. */
 const ACTIVITY_MAX_AGE_MS = 5 * 60_000;
 
+/** How often an active Claude run is checked on GitHub when its runs are read. */
+const CLAUDE_CHECK_MS = 20_000;
 /** A security scan is redone once the last one is this old. */
 const SECURITY_SCAN_INTERVAL_MS = 15 * 60_000;
 /** Repo/scanner calls done per alarm tick: bounded well under any Workers subrequest cap. */
@@ -188,8 +190,29 @@ export class Hub extends DurableObject<EdgeEnv> {
 
   // ---------- RPC: Fix with Claude ----------
 
+  /**
+   * Runs you started. Active ones are also checked on GitHub (at most every 20s each), so they
+   * advance without webhooks: local mode gets none, and a delivery can be missed.
+   */
   getClaudeRuns(): Promise<Result<ClaudeRuns>> {
-    return asResult(async () => pruneRuns((await this.ctx.storage.get<ClaudeRuns>("claudeRuns")) ?? {}));
+    return asResult(async () => {
+      const stored = pruneRuns((await this.ctx.storage.get<ClaudeRuns>("claudeRuns")) ?? {});
+      const now = Date.now();
+      const due = Object.values(stored).filter((r) => isActiveRun(r, now) && now - Date.parse(r.checkedAt ?? r.requestedAt) >= CLAUDE_CHECK_MS);
+      if (!due.length) return stored;
+      // A failed check (rate limit, access lost) just leaves the run where it was until next time.
+      const found = await mapLimit(due, 3, (run) => this.withAuth((auth) => fetchRunProgress(auth, run)).catch(() => []));
+      const at = new Date(now).toISOString();
+      // Re-read: a webhook may have advanced a run while we were asking GitHub.
+      let runs = (await this.ctx.storage.get<ClaudeRuns>("claudeRuns")) ?? {};
+      for (const run of due) {
+        const key = claudeKey(run.repo, run.number);
+        if (runs[key]) runs = { ...runs, [key]: { ...runs[key], checkedAt: at } };
+      }
+      runs = found.flat().reduce((acc, sig) => advanceRun(acc, sig, at), runs);
+      await this.ctx.storage.put("claudeRuns", runs);
+      return pruneRuns(runs, now);
+    });
   }
 
   /** Whether the repo runs the Claude GitHub Action, so an @claude comment gets answered. Uncached. */

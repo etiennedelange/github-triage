@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { advanceRun, claudeBranchIssue, claudeKey, pruneRuns, runLink, usesClaudeAction, type ClaudeRun, type ClaudeRuns } from "./claude";
+import { advanceRun, branchForRun, claudeBranchIssue, claudeBranchTime, claudeKey, isActiveRun, pruneRuns, runLink, usesClaudeAction, type ClaudeRun, type ClaudeRuns } from "./claude";
 
 const run: ClaudeRun = {
   repo: "Acme/api",
@@ -44,6 +44,23 @@ describe("Claude Action detection", () => {
     expect(claudeBranchIssue("claude/issue-42-20260928-1200")).toBe(42);
     expect(claudeBranchIssue("claude/pr-42-20260928-1200")).toBeUndefined();
     expect(claudeBranchIssue("feature/issue-42-x")).toBeUndefined();
+  });
+
+  it("dates branches from their suffix and ignores ones from before the run", () => {
+    expect(claudeBranchTime("claude/issue-3-20260928-1005")).toBe(Date.parse("2026-09-28T10:05:00Z"));
+    expect(claudeBranchTime("claude/issue-3-x")).toBeUndefined();
+    // Requested 10:00:00: the same minute counts, the day before doesn't.
+    expect(branchForRun(run, ["claude/issue-3-20260927-1000", "claude/issue-3-20260928-1000", "claude/issue-4-20260928-1001"])).toBe(
+      "claude/issue-3-20260928-1000",
+    );
+    expect(branchForRun(run, ["claude/issue-3-20260927-1000"])).toBeUndefined();
+  });
+
+  it("stops checking a run once it has a PR or is a day old", () => {
+    const at = Date.parse(now);
+    expect(isActiveRun(run, at)).toBe(true);
+    expect(isActiveRun({ ...run, state: "pr" }, at)).toBe(false);
+    expect(isActiveRun(run, Date.parse("2026-09-29T10:00:01Z"))).toBe(false);
   });
 
   it("spots the Action in a workflow file", () => {
