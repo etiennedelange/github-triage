@@ -159,6 +159,12 @@ export default defineConfig({
         },
       },
       {
+        files: ["public/sw.js"],
+        env: {
+          serviceworker: true,
+        },
+      },
+      {
         files: ["scripts/**/*.ts"],
         env: {
           node: true,

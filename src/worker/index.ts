@@ -9,6 +9,7 @@ import { z } from "zod";
 import { handleAuth, sessionLogin, unauthenticated } from "@/edge/auth";
 import { verifyWebhook } from "@/edge/crypto";
 import { hubFor, splitList, type EdgeEnv } from "@/edge/env";
+import { pushSubscription } from "@/edge/push";
 
 export { Hub } from "@/edge/hub";
 
@@ -54,6 +55,16 @@ const api = new Hono<AppEnv>()
     const { repo, number, body } = c.req.valid("json");
     return c.json(await hub(c).requestClaude(repo, number, body));
   })
+  // Desktop notifications: the key to subscribe with, then this browser's subscription.
+  .get("/push", async (c) => c.json({ key: await hub(c).pushKey() }))
+  .post("/push", validator("json", parse(z.object({ subscription: pushSubscription, test: z.boolean() }))), async (c) => {
+    const { subscription, test } = c.req.valid("json");
+    return c.json(await hub(c).subscribePush(subscription, new URL(c.req.url).origin, test));
+  })
+  .delete("/push", validator("json", parse(z.object({ endpoint: z.string() }))), async (c) => {
+    await hub(c).unsubscribePush(c.req.valid("json").endpoint);
+    return c.body(null, 204);
+  })
   .get("/live", (c) => hub(c).fetch(c.req.raw));
 
 export type ApiType = typeof api;
@@ -71,6 +82,9 @@ app.post("/api/github/webhook", async (c) => {
   for (const login of splitList(c.env.ALLOWED_LOGINS)) c.executionCtx.waitUntil(hubFor(c.env, login).webhook(delivery, event, payload));
   return c.body(null, 202);
 });
+
+// The service worker has nothing private in it, and a sign-in redirect would fail its update check.
+app.get("/sw.js", (c) => c.env.ASSETS.fetch(c.req.raw));
 
 app.all("/auth/*", async (c) => {
   const res = await handleAuth(c.req.raw, c.env, {
