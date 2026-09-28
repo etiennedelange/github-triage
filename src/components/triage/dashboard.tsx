@@ -4,7 +4,7 @@ import { useActivity, useBranches, useInbox, useRateLimits, useSecurity, useSess
 import { AppLink, useRepoFilter } from "@/client/url";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import type { Inbox, RateLimits } from "@/lib/github/inbox";
+import type { RateLimits } from "@/lib/github/inbox";
 import type { Failure } from "@/lib/github/result";
 import type { SecurityReport } from "@/lib/github/security";
 import { ago, filterByRepo, STALE_DAYS, type AlertSource } from "@/lib/triage";
@@ -36,7 +36,7 @@ export function Dashboard() {
       inbox={data}
       repo={repo}
       live
-      contextLine={<ContextLine inbox={data} repo={repo} oauth={oauth} />}
+      contextLine={<ContextLine repo={repo} />}
       securityPanel={<SecurityPanel repo={repo} oauth={oauth} />}
       branchesPanel={<BranchesPanel repo={repo} oauth={oauth} />}
       activityPanel={<ActivityPanel repo={repo} oauth={oauth} />}
@@ -44,13 +44,13 @@ export function Dashboard() {
   );
 }
 
-function ContextLine({ inbox, repo, oauth }: { inbox: Inbox; repo?: string; oauth: boolean }) {
+/** Only there when it has something to say: an active repo filter, or an API budget running low. */
+function ContextLine({ repo }: { repo?: string }) {
+  const { data: limits } = useRateLimits();
+  const low = limits?.ok && (isLow(limits.data.graphql) || isLow(limits.data.rest));
+  if (!repo && !low) return null;
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-      <span className="inline-flex items-center gap-1.5">
-        <img src={inbox.viewer.avatarUrl} alt="" width={16} height={16} className="size-4 rounded-full" />
-        <span className="font-medium text-foreground">@{inbox.viewer.login}</span>
-      </span>
       {repo && (
         <AppLink
           href="/"
@@ -59,17 +59,37 @@ function ContextLine({ inbox, repo, oauth }: { inbox: Inbox; repo?: string; oaut
           {repo} <X aria-label="Clear filter" className="size-3" />
         </AppLink>
       )}
-      {/* Only when running low; the status bar always has them (on wider screens). Last in the row, so nothing moves when it loads. */}
       <ApiBudgets onlyLow />
-      {oauth && (
-        // A plain form post to the Worker: POST so a prefetch can't sign you out.
-        <form action="/auth/logout" method="post" className="ml-auto">
-          <button type="submit" className="inline-flex items-center gap-1 hover:text-foreground">
-            <LogOut aria-hidden className="size-3" /> Sign out
-          </button>
-        </form>
-      )}
     </div>
+  );
+}
+
+/** Who's signed in, for the header. Shares the inbox query, so it costs nothing extra. */
+export function Viewer() {
+  const { data: result } = useInbox();
+  if (!result?.ok) return null;
+  const { viewer } = result.data;
+  return (
+    // Phones need the header for Live and Refresh.
+    <span className="hidden min-w-0 items-center gap-1.5 text-sm text-muted-foreground sm:inline-flex">
+      <img src={viewer.avatarUrl} alt="" width={16} height={16} className="size-4 rounded-full" />
+      <span className="truncate">@{viewer.login}</span>
+    </span>
+  );
+}
+
+/** Deployed mode only: local mode has no session to end. */
+export function SignOut() {
+  const { data: session } = useSession();
+  if (!session?.oauth) return null;
+  return (
+    // A plain form post to the Worker: POST so a prefetch can't sign you out.
+    // ml-auto on phones, where the API budgets that push it right are hidden.
+    <form action="/auth/logout" method="post" className="ml-auto sm:ml-0">
+      <button type="submit" className="-my-1 inline-flex items-center gap-1 py-1 hover:text-foreground">
+        <LogOut aria-hidden className="size-3" /> Sign out
+      </button>
+    </form>
   );
 }
 
@@ -356,9 +376,16 @@ export function DashboardSkeleton() {
           <Skeleton key={i} className="h-8 w-40 rounded-lg" />
         ))}
       </div>
-      <div className="gap-3 lg:columns-2 [&>*]:mb-3 [&>*]:break-inside-avoid">
-        {[4, 4, 4, 2, 2, 2, 2, 2].map((rows, i) => (
-          <PanelSkeleton key={i} rows={rows} />
+      <div className="grid items-start gap-3 lg:grid-cols-2">
+        {[
+          [2, 4, 4, 2],
+          [3, 3, 2, 2],
+        ].map((stack, i) => (
+          <div key={i} className="space-y-3">
+            {stack.map((rows, j) => (
+              <PanelSkeleton key={j} rows={rows} />
+            ))}
+          </div>
         ))}
       </div>
     </div>

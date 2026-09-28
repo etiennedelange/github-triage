@@ -1,7 +1,7 @@
 import { ShieldCheck } from "lucide-react";
 
 import { ThemeToggle } from "@/components/theme-toggle";
-import { ApiBudgets, Dashboard } from "@/components/triage/dashboard";
+import { ApiBudgets, Dashboard, SignOut, Viewer } from "@/components/triage/dashboard";
 import { LiveAnnouncer, LiveStatus, NewVersion } from "@/components/triage/live";
 import { FxToggle, RefreshButton } from "@/components/triage/refresh-button";
 import { RefreshFx } from "@/components/triage/refresh-fx";
@@ -21,7 +21,8 @@ export function App() {
         <header className="flex items-center gap-2">
           <ShieldCheck aria-hidden className="size-5" />
           <h1 className="text-base font-semibold tracking-tight whitespace-nowrap">GitHub Triage</h1>
-          <div className="ml-auto flex items-center gap-1.5 sm:gap-2">
+          <Viewer />
+          <div className="ml-auto flex shrink-0 items-center gap-1.5 sm:gap-2">
             <NewVersion />
             <LiveStatus />
             <RefreshButton />
@@ -35,13 +36,17 @@ export function App() {
             Sticky, so it stays pinned to the bottom of the screen while the board scrolls under it. */}
         <footer className="sticky bottom-0 z-10 -mx-4 flex h-8 items-center gap-x-4 overflow-x-auto border-t bg-background px-4 text-xs whitespace-nowrap text-muted-foreground">
           <button type="button" onClick={openShortcuts} className="-my-1 py-1 hover:text-foreground">
-            Shortcuts and colours <kbd className="font-mono">?</kbd>
+            Shortcuts and colours{" "}
+            <kbd className="ml-0.5 inline-flex h-4 min-w-4 items-center justify-center rounded border bg-muted px-1 font-mono text-[10px] text-foreground">
+              ?
+            </kbd>
           </button>
           <FxToggle />
           {/* No room on phones; the context line still shows a budget once it runs low. */}
           <span className="ml-auto hidden sm:inline">
             <ApiBudgets />
           </span>
+          <SignOut />
         </footer>
       </div>
       <Shortcuts />

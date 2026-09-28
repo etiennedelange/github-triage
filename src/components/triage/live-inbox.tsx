@@ -96,89 +96,93 @@ export function LiveInbox({
 
       <RepoChips lists={[review.all, mine.all, incoming.all, assigned.all, untriaged.all]} active={repo} />
 
-      {/* One flow in urgency order (what waits on you, then FYI), poured into two balanced
-          columns: fixed lanes left a hole under whichever lane had less in it that day. */}
-      <div id="panels" tabIndex={-1} className="scroll-mt-4 gap-3 outline-none lg:columns-2 [&>*]:mb-3 [&>*]:break-inside-avoid">
-        <Panel
-          id="review"
-          icon={Eye}
-          title="Needs your review"
-          count={review.items.length}
-          empty={`No reviews waiting on you${where}.`}
-          footer={more("pulls", "review", review)}
-        >
-          {review.items.map((pr) => (
-            <PrRow
-              key={rowKey(pr.url, review.live, returned)}
-              live={review.live.has(pr.url) || returned.has(pr.url)}
-              pr={pr}
-              perspective="reviewer"
-            />
-          ))}
-        </Panel>
-        <Panel
-          id="mine"
-          icon={GitPullRequest}
-          title="Your pull requests"
-          count={mine.items.length}
-          empty={`No open pull requests${where}.`}
-          footer={more("pulls", "mine", mine)}
-        >
-          {mineSorted.map((pr) => (
-            <PrRow
-              key={rowKey(pr.url, mine.live, returned)}
-              live={mine.live.has(pr.url) || returned.has(pr.url)}
-              pr={pr}
-              perspective="author"
-            />
-          ))}
-        </Panel>
-        {securityPanel}
-        <Panel
-          id="assigned"
-          icon={CircleDot}
-          title="Assigned to you"
-          count={assigned.items.length}
-          empty={`No issues assigned to you${where}.`}
-          footer={more("issues", "assigned", assigned)}
-        >
-          {assigned.items.map((i) => (
-            <IssueRow key={rowKey(i.url, assigned.live, returned)} live={assigned.live.has(i.url) || returned.has(i.url)} issue={i} />
-          ))}
-        </Panel>
-        <Panel
-          quiet
-          id="incoming"
-          icon={GitPullRequestArrow}
-          title="Incoming pull requests"
-          count={incoming.items.length}
-          empty={repo ? `No one else has PRs open on ${repo}.` : "No one else has PRs open on your repos."}
-          footer={more("pulls", "incoming", incoming)}
-        >
-          {incoming.items.map((pr) => (
-            <PrRow
-              key={rowKey(pr.url, incoming.live, returned)}
-              live={incoming.live.has(pr.url) || returned.has(pr.url)}
-              pr={pr}
-              perspective="reviewer"
-            />
-          ))}
-        </Panel>
-        <Panel
-          quiet
-          id="untriaged"
-          icon={InboxIcon}
-          title="Unassigned issues"
-          count={untriaged.items.length}
-          empty={repo ? `Every issue on ${repo} has an owner.` : "Every issue on your repos has an owner."}
-          footer={more("issues", "untriaged", untriaged)}
-        >
-          {untriaged.items.map((i) => (
-            <IssueRow key={rowKey(i.url, untriaged.live, returned)} live={untriaged.live.has(i.url) || returned.has(i.url)} issue={i} />
-          ))}
-        </Panel>
-        {branchesPanel}
-        {activityPanel}
+      {/* Two stacks: what's waiting on you on the left, FYI on the right. Each stacks on its own, so a
+          short panel leaves no hole, and a live update never moves a panel to the other column. */}
+      <div id="panels" tabIndex={-1} className="grid scroll-mt-4 items-start gap-3 outline-none lg:grid-cols-2">
+        <div className="space-y-3">
+          <Panel
+            id="review"
+            icon={Eye}
+            title="Needs your review"
+            count={review.items.length}
+            empty={`No reviews waiting on you${where}.`}
+            footer={more("pulls", "review", review)}
+          >
+            {review.items.map((pr) => (
+              <PrRow
+                key={rowKey(pr.url, review.live, returned)}
+                live={review.live.has(pr.url) || returned.has(pr.url)}
+                pr={pr}
+                perspective="reviewer"
+              />
+            ))}
+          </Panel>
+          <Panel
+            id="mine"
+            icon={GitPullRequest}
+            title="Your pull requests"
+            count={mine.items.length}
+            empty={`No open pull requests${where}.`}
+            footer={more("pulls", "mine", mine)}
+          >
+            {mineSorted.map((pr) => (
+              <PrRow
+                key={rowKey(pr.url, mine.live, returned)}
+                live={mine.live.has(pr.url) || returned.has(pr.url)}
+                pr={pr}
+                perspective="author"
+              />
+            ))}
+          </Panel>
+          {securityPanel}
+          <Panel
+            id="assigned"
+            icon={CircleDot}
+            title="Assigned to you"
+            count={assigned.items.length}
+            empty={`No issues assigned to you${where}.`}
+            footer={more("issues", "assigned", assigned)}
+          >
+            {assigned.items.map((i) => (
+              <IssueRow key={rowKey(i.url, assigned.live, returned)} live={assigned.live.has(i.url) || returned.has(i.url)} issue={i} />
+            ))}
+          </Panel>
+        </div>
+        <div className="space-y-3">
+          <Panel
+            quiet
+            id="incoming"
+            icon={GitPullRequestArrow}
+            title="Incoming pull requests"
+            count={incoming.items.length}
+            empty={repo ? `No one else has PRs open on ${repo}.` : "No one else has PRs open on your repos."}
+            footer={more("pulls", "incoming", incoming)}
+          >
+            {incoming.items.map((pr) => (
+              <PrRow
+                key={rowKey(pr.url, incoming.live, returned)}
+                live={incoming.live.has(pr.url) || returned.has(pr.url)}
+                pr={pr}
+                perspective="reviewer"
+              />
+            ))}
+          </Panel>
+          <Panel
+            quiet
+            id="untriaged"
+            icon={InboxIcon}
+            title="Unassigned issues"
+            count={untriaged.items.length}
+            empty={repo ? `Every issue on ${repo} has an owner.` : "Every issue on your repos has an owner."}
+            footer={more("issues", "untriaged", untriaged)}
+          >
+            {untriaged.items.map((i) => (
+              <IssueRow key={rowKey(i.url, untriaged.live, returned)} live={untriaged.live.has(i.url) || returned.has(i.url)} issue={i} />
+            ))}
+          </Panel>
+          {branchesPanel}
+          {activityPanel}
+        </div>
       </div>
     </div>
   );
@@ -230,37 +234,44 @@ function WaitingOnYou({
     { key: "merge", href: "#mine", count: pr.mergeable, label: ["PR ready to merge", "PRs ready to merge"], tone: "success" },
   ];
   const waiting = all.filter((w) => w.count > 0);
+  // Ranked in two tiers: what's blocking (red, orange) reads as the headline; the rest steps down.
+  const now = waiting.filter((w) => w.tone === "danger" || w.tone === "orange");
+  const then = waiting.filter((w) => !now.includes(w));
   const sig = [...waiting.map((w) => `${w.key}:${w.count}`), security.state].join("|");
+  const item = (w: Waiting, strong: boolean) => (
+    <a
+      key={w.key}
+      href={w.href}
+      className={cn(
+        "-my-1 py-1 whitespace-nowrap underline-offset-4 hover:underline",
+        strong ? "text-sm font-semibold sm:text-base" : "text-sm font-medium text-muted-foreground hover:text-foreground",
+      )}
+    >
+      <span className={cn("mr-1 font-mono tabular-nums", TEXT[w.tone])}>
+        <FxNumber value={w.count} />
+      </span>
+      {w.label[w.count === 1 ? 0 : 1]}
+    </a>
+  );
 
   return (
-    <nav aria-label="Waiting on you" data-fx-panel data-fx-sig={sig} className="flex flex-wrap items-center gap-1.5">
+    <nav aria-label="Waiting on you" data-fx-panel data-fx-sig={sig} className="flex flex-wrap items-baseline gap-x-5 gap-y-1.5 py-1">
       {waiting.length === 0 && security.state === "ok" ? (
-        <p className="inline-flex items-center gap-1.5 py-1 text-sm font-medium">
-          <CircleCheck aria-hidden className="size-4 text-success" />
+        <p className="inline-flex items-center gap-1.5 text-base font-semibold">
+          <CircleCheck aria-hidden className="size-4 self-center text-success" />
           Nothing is waiting on you{repo ? ` in ${repo}` : ""}.
         </p>
       ) : (
-        waiting.map((w) => (
-          // Grey chrome, like the rest of the board: only the count carries the status colour.
-          <a
-            key={w.key}
-            href={w.href}
-            className="inline-flex h-7 items-center gap-1.5 rounded-lg border bg-card pr-2.5 pl-1 text-xs transition-colors hover:bg-muted/50 sm:h-8 sm:text-sm"
-          >
-            <span className={cn("rounded-md px-1.5 font-mono font-semibold tabular-nums", TEXT[w.tone])}>
-              <FxNumber value={w.count} />
-            </span>
-            <span className="font-medium">{w.label[w.count === 1 ? 0 : 1]}</span>
-          </a>
-        ))
+        <>
+          {now.map((w) => item(w, true))}
+          {now.length > 0 && then.length > 0 && <span aria-hidden className="hidden h-4 w-px self-center bg-border sm:block" />}
+          {then.map((w) => item(w, now.length === 0))}
+        </>
       )}
-      {security.state === "pending" && <span className="px-1 text-xs text-muted-foreground">Checking security alerts…</span>}
-      {security.state === "scanning" && <span className="px-1 text-xs text-muted-foreground">Security scan running…</span>}
+      {security.state === "pending" && <span className="text-xs text-muted-foreground">Checking security alerts…</span>}
+      {security.state === "scanning" && <span className="text-xs text-muted-foreground">Security scan running…</span>}
       {security.state === "error" && (
-        <a
-          href="#security"
-          className="inline-flex h-7 items-center rounded-lg border bg-card px-2.5 text-xs font-medium text-destructive sm:h-8 sm:text-sm"
-        >
+        <a href="#security" className="text-sm font-medium text-destructive underline-offset-4 hover:underline">
           Security alerts couldn't load
         </a>
       )}
