@@ -1,6 +1,8 @@
+import { CircleArrowUp } from "lucide-react";
 import { useEffect, useState, useSyncExternalStore } from "react";
 
 import { queryClient, refreshAll, useInbox } from "@/client/api";
+import { Button } from "@/components/ui/button";
 import { serverEnvelope, type ServerMessage } from "@/edge/protocol";
 import type { AlertPatch, ItemPatch } from "@/lib/live";
 import { ago } from "@/lib/triage";
@@ -26,6 +28,8 @@ type State = {
   lastLiveAt?: number;
   /** When the connection went down (cleared once live again); 0 when it's down for good. */
   downSince?: number;
+  /** A newer build was deployed than the one this tab is running. */
+  outdated?: boolean;
 };
 
 const OFF: State = { status: "off", items: new Map(), alerts: new Map(), unseen: new Set(), returned: new Map() };
@@ -81,19 +85,29 @@ let lastSeq = 0;
 /** Everything up to here is already on screen: the snapshot's fetch time, then each patch's. */
 let knownUpTo = 0;
 let resyncing = false;
+/**
+ * An attempt that hasn't opened by then is dropped and retried: a port forward (devcontainer,
+ * tunnel) can accept the connection while the server is down and never answer or close it.
+ */
+const CONNECT_TIMEOUT_MS = 5_000;
 
 function connect() {
   clearTimeout(retry);
   update((s) => ({ ...s, status: "connecting" }));
   const ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/api/live`);
   socket = ws;
+  const opening = setTimeout(() => ws.close(), CONNECT_TIMEOUT_MS);
 
-  ws.onopen = () => ws.send(JSON.stringify({ type: "hello", fetchedAt: new Date(knownUpTo).toISOString() }));
+  ws.onopen = () => {
+    clearTimeout(opening);
+    ws.send(JSON.stringify({ type: "hello", fetchedAt: new Date(knownUpTo).toISOString() }));
+  };
   ws.onmessage = (e) => {
     const env = serverEnvelope.safeParse(JSON.parse(String(e.data)));
     if (env.success) receive(env.data as unknown as ServerMessage);
   };
   ws.onclose = (e) => {
+    clearTimeout(opening);
     if (socket !== ws) return;
     socket = undefined;
     // 4001: signed out elsewhere. No point reconnecting.
@@ -111,7 +125,9 @@ function receive(msg: ServerMessage) {
   if (msg.type === "welcome" || msg.type === "resync") {
     lastSeq = msg.seq;
     backoff = 1_000;
-    update((s) => ({ ...s, status: "live", downSince: undefined }));
+    // A Hub from before build IDs sends none: nothing to compare against.
+    const outdated = msg.build !== undefined && msg.build !== __BUILD_ID__;
+    update((s) => ({ ...s, status: "live", downSince: undefined, outdated: s.outdated || outdated }));
     if (msg.type === "resync") resync();
     return;
   }
@@ -274,5 +290,17 @@ export function LiveStatus() {
         </span>
       )}
     </span>
+  );
+}
+
+/** Shown once a newer build is deployed: this tab keeps working, but reloading picks up the new one. */
+export function NewVersion() {
+  const { outdated } = useLive();
+  if (!outdated) return null;
+  return (
+    <Button size="sm" title="A new version of GitHub Triage was deployed. Reload to use it." onClick={() => location.reload()}>
+      <CircleArrowUp data-icon="inline-start" />
+      <span className="hidden sm:inline">New version:</span> Reload
+    </Button>
   );
 }
