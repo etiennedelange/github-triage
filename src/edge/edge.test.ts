@@ -189,6 +189,17 @@ describe("webhook → changes", () => {
     ]);
   });
 
+  it("drops a deleted, archived or uninstalled repo's alerts", () => {
+    expect(changesFor("repository", { action: "deleted", repository })).toEqual([{ kind: "repo-gone", repo: "acme/api" }]);
+    expect(changesFor("repository", { action: "archived", repository })).toEqual([{ kind: "repo-gone", repo: "acme/api" }]);
+    expect(changesFor("repository", { action: "renamed", repository })).toEqual([]);
+    expect(changesFor("installation_repositories", { action: "removed", repositories_removed: [{ full_name: "acme/web" }] })).toEqual([
+      { kind: "repo-gone", repo: "acme/web" },
+      { kind: "resync" },
+    ]);
+    expect(changesFor("installation_repositories", { action: "added", repositories_added: [] })).toEqual([{ kind: "resync" }]);
+  });
+
   it("ignores unknown events and malformed payloads", () => {
     expect(changesFor("star", { action: "created", repository })).toEqual([]);
     expect(changesFor("pull_request", "nope")).toEqual([]);

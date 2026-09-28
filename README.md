@@ -75,7 +75,7 @@ The browser overlays these updates on the snapshot it fetched. A row that arrive
    - Callback URL: `https://<your-host>/auth/callback`. Leave **Expire user authorization tokens** on.
    - Webhook URL: `https://<your-host>/api/github/webhook`, with a random secret.
    - Repository permissions, all **read-only**: Metadata, Pull requests, Issues, Checks, Commit statuses, Contents, Dependabot alerts, Code scanning alerts, Secret scanning alerts. Organization permission: Members (read), so team review requests count.
-   - Subscribe to events: Pull request, Pull request review, Issues, Issue comment, Check suite, Push, Dependabot alert, Code scanning alert, Secret scanning alert. Installation events are sent to every App anyway.
+   - Subscribe to events: Pull request, Pull request review, Issues, Issue comment, Check suite, Push, Repository, Dependabot alert, Code scanning alert, Secret scanning alert. Installation events are sent to every App anyway.
    - Generate a client secret, then **install** the App on your account and on any orgs in `TRIAGE_OWNERS`.
 2. **Set the configuration.** Put `ALLOWED_LOGINS` (your login) and optionally `TRIAGE_OWNERS` in `wrangler.jsonc` → `vars`. Then add the secrets:
    ```sh

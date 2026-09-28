@@ -42,11 +42,12 @@ export const useSecurity = () =>
   });
 
 /**
- * Refresh: the Hub refetches the inbox from GitHub and returns it. The security scan is
- * left alone: it's expensive and redone on its own schedule.
+ * Refresh: the Hub refetches the inbox from GitHub and returns it. The security scan isn't
+ * redone (it's expensive and runs on its own schedule), but the stored one is reread: it may
+ * have finished, or dropped a deleted repo, since this tab loaded it.
  */
 export async function refreshAll(): Promise<void> {
   const inbox = await json(await api.refresh.$post());
   queryClient.setQueryData(["inbox"], inbox);
-  await queryClient.invalidateQueries({ queryKey: ["rate-limits"] });
+  await queryClient.invalidateQueries({ predicate: (q) => q.queryKey[0] === "rate-limits" || q.queryKey[0] === "security" });
 }

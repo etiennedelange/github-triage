@@ -22,6 +22,8 @@ export type Change =
   | { kind: "alert-gone"; url: string }
   /** The payload's alert didn't match our schema: fetch that one alert over REST instead. */
   | { kind: "alert-refetch"; repo: string; source: AlertSource; number: number }
+  /** Deleted, archived or removed from the installation: drop its security alerts. */
+  | { kind: "repo-gone"; repo: string }
   /** The installation's repo set changed: only a full refetch can tell what's visible now. */
   | { kind: "resync" };
 
@@ -35,6 +37,7 @@ const payload = z.looseObject({
   issue: z.looseObject({ number: z.number() }).optional(),
   check_suite: z.looseObject({ pull_requests: z.array(z.looseObject({ number: z.number() })) }).optional(),
   alert: z.looseObject({ number: z.number(), html_url: z.string() }).optional(),
+  repositories_removed: z.array(z.looseObject({ full_name: z.string() })).optional(),
 });
 type Payload = z.infer<typeof payload>;
 
@@ -85,9 +88,17 @@ export function changesFor(event: string, raw: unknown): Change[] {
         ? [{ kind: "repo-prs", repo }]
         : [];
 
+    // Needs the App subscribed to Repository events. Scans skip archived repos too.
+    case "repository":
+      return repo && ["deleted", "archived"].includes(p.action ?? "") ? [{ kind: "repo-gone", repo }] : [];
+
     case "installation":
-    case "installation_repositories":
       return [{ kind: "resync" }];
+    case "installation_repositories":
+      return [
+        ...(p.repositories_removed ?? []).map((r) => ({ kind: "repo-gone", repo: r.full_name }) as const),
+        { kind: "resync" },
+      ];
 
     case "dependabot_alert":
     case "code_scanning_alert":

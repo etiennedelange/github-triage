@@ -99,9 +99,13 @@ export class Hub extends DurableObject<EdgeEnv> {
     await this.ctx.storage.put("lastEventAt", at);
     // The stored inbox may now be out of date: the next page load refetches it.
     await this.ctx.storage.delete("inbox");
+    // Before the no-tab return: the stored scan must forget the repo even with nobody watching.
+    const goneRepos = changes.flatMap((c) => (c.kind === "repo-gone" ? [c.repo] : []));
+    const goneAlerts = goneRepos.length ? await this.forgetRepos(goneRepos) : [];
     // Nobody watching: a tab that opens later sees lastEventAt and resyncs once.
     if (!this.ctx.getWebSockets().length) return;
 
+    for (const url of goneAlerts) this.broadcast({ type: "alert-gone", at, url });
     const keys: QueueKey[] = [];
     for (const c of changes) {
       if (c.kind === "subject") keys.push(c.key);
@@ -193,6 +197,27 @@ export class Hub extends DurableObject<EdgeEnv> {
     };
     await this.ctx.storage.put("securityReport", report);
     await this.ctx.storage.delete("securityJob");
+  }
+
+  /** Drop repos from the stored scan and any scan in progress; returns the removed alerts' URLs. */
+  private async forgetRepos(repos: string[]): Promise<string[]> {
+    const gone = new Set(repos.map((r) => r.toLowerCase()));
+    const keep = (repo: string) => !gone.has(repo.toLowerCase());
+    const removed: string[] = [];
+    const report = await this.ctx.storage.get<SecurityReport>("securityReport");
+    if (report) {
+      removed.push(...report.alerts.filter((a) => !keep(a.repo)).map((a) => a.url));
+      await this.ctx.storage.put("securityReport", {
+        ...report,
+        alerts: report.alerts.filter((a) => keep(a.repo)),
+        repos: report.repos.filter((r) => keep(r.repo)),
+        truncated: report.truncated.filter((t) => keep(t.split(" ")[0])),
+      } satisfies SecurityReport);
+    }
+    const job = await this.ctx.storage.get<SecurityJob>("securityJob");
+    // Mid-scan, dropping repos would shift `index`: restart from scratch on the next getSecurity().
+    if (job?.repos.some((r) => !keep(r))) await this.ctx.storage.delete("securityJob");
+    return removed;
   }
 
   // ---------- WebSockets ----------
