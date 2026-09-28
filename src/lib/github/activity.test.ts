@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 
 import { diffSeen, followedAt, logStar, toActivity, type Snapshot, type StarLog } from "./activity";
 import { describeErrors } from "./http";

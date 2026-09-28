@@ -16,6 +16,6 @@
       "@/*": ["./src/*"]
     }
   },
-  "include": ["src", "scripts", "cloudflare-env.d.ts", "vite.config.ts", "vitest.config.mts", "eslint.config.mjs"],
+  "include": ["src", "scripts", "cloudflare-env.d.ts", "vite.config.ts", "vitest.config.mts"],
   "exclude": ["node_modules", "dist", ".wrangler"]
 }

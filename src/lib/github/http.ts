@@ -85,7 +85,7 @@ export function describeErrors(errors: GraphQLErrorEntry[]): string {
 
 /** Run tasks with bounded concurrency so a big account doesn't trip secondary rate limits. */
 export async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
-  const out = new Array<R>(items.length);
+  const out = Array.from<R>({ length: items.length });
   let next = 0;
   const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
     while (next < items.length) {

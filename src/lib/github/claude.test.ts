@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vite-plus/test";
 
 import type { ClaudeRun } from "@/lib/claude";
 
@@ -6,7 +6,7 @@ import { fetchRunProgress } from "./claude";
 
 function githubFetch(handlers: Record<string, unknown>) {
   return vi.fn(async (input: RequestInfo | URL) => {
-    const url = new URL(String(input));
+    const url = new URL(input instanceof Request ? input.url : input);
     const body = handlers[url.pathname + url.search];
     if (body === undefined) return new Response(JSON.stringify({ message: "not found" }), { status: 404 });
     return Response.json(body);

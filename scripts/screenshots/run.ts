@@ -32,7 +32,7 @@ const mock = await startMockGitHub(MOCK_PORT);
 // 127.0.0.1, not localhost: Vite may otherwise listen on IPv6 only, which Node's fetch can't reach.
 const vite = spawn(
   "pnpm",
-  ["exec", "vite", "--config", "scripts/screenshots/vite.config.ts", "--host", "127.0.0.1", "--port", "5199", "--strictPort"],
+  ["exec", "vp", "dev", "--config", "scripts/screenshots/vite.config.ts", "--host", "127.0.0.1", "--port", "5199", "--strictPort"],
   {
     stdio: ["ignore", "ignore", "inherit"],
     detached: true,
