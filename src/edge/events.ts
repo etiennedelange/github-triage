@@ -22,6 +22,8 @@ export type Change =
   | { kind: "repo-gone"; repo: string }
   /** Someone starred or unstarred one of your repos. */
   | { kind: "star"; starred: boolean; star: Extract<ActivityEvent, { kind: "star" }> }
+  /** A branch was pushed, deleted, or its PR closed: the stale-branch list may have changed. */
+  | { kind: "branches" }
   /** Progress on a "Fix with Claude" run; ignored unless we started one for that issue. */
   | { kind: "claude"; signal: ClaudeSignal }
   /** The installation's repo set changed: only a full refetch can tell what's visible now. */
@@ -78,6 +80,7 @@ export function changesFor(event: string, raw: unknown): Change[] {
     case "pull_request_review": {
       if (!repo || !p.pull_request) return [];
       const out: Change[] = [{ kind: "subject", key: subjectKey(repo, p.pull_request.number) }];
+      if (event === "pull_request" && ["closed", "reopened"].includes(p.action ?? "")) out.push({ kind: "branches" });
       const issue = event === "pull_request" && p.action === "opened" && claudeBranchIssue(p.pull_request.head?.ref ?? "");
       if (issue && p.pull_request.html_url)
         out.push({ kind: "claude", signal: { kind: "pr", repo, number: issue, url: p.pull_request.html_url } });
@@ -106,7 +109,9 @@ export function changesFor(event: string, raw: unknown): Change[] {
       if (p.repository?.default_branch && p.ref === `refs/heads/${p.repository.default_branch}`) return [{ kind: "repo-prs", repo }];
       const branch = p.ref?.replace(/^refs\/heads\//, "") ?? "";
       const issue = !p.deleted && claudeBranchIssue(branch);
-      return issue ? [{ kind: "claude", signal: { kind: "branch", repo, number: issue, branch } }] : [];
+      const out: Change[] = [{ kind: "branches" }];
+      if (issue) out.push({ kind: "claude", signal: { kind: "branch", repo, number: issue, branch } });
+      return out;
     }
 
     // Needs the App subscribed to Repository events. Scans skip archived repos too.

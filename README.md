@@ -20,6 +20,7 @@ One pane for everything on GitHub that's waiting on you: pull requests, issues a
 | **Security alerts**        | Open Dependabot, code scanning and secret scanning alerts across your repos, by severity                                       |
 | **Assigned to you**        | Open issues assigned to you                                                                                                    |
 | **Untriaged issues**       | Open issues on your repos with no assignee                                                                                     |
+| **Stale branches**         | Branches on your repos whose PR was merged or closed, or that have no PR and no commits for 14+ days                           |
 
 Click any repo name (or a chip) to filter everything to that repo; the filter lives in the URL (`?repo=owner/name`). Items untouched for 14+ days are marked stale.
 
@@ -45,6 +46,10 @@ The scan runs in the background in small batches, never inside a page request: s
 
 The **Stars & followers** panel lists the latest stars and new watchers on repos you own and your newest followers, from one GraphQL request. Stars carry GitHub's timestamp and arrive live through the Star webhook. GitHub won't list a repo's stargazers to the App's sign-in token, so on the deployed app the Hub records stars from those webhooks instead, and only stars from after it started recording are shown. GitHub has no follow webhook and doesn't document follow times, so followers are checked every five minutes. Their follow time is read from GitHub's follower cursor, which happens to encode it; if that ever stops working, a follower is dated from when the dashboard first saw them. Watchers have neither a webhook nor any date, so they're always dated from when the dashboard first saw them; people already watching when tracking started aren't listed.
 
+### Stale branches
+
+The **Stale branches** panel checks up to `TRIAGE_MAX_REPOS` of your most recently pushed repos (you plus `TRIAGE_OWNERS`) in one GraphQL request, reading up to 100 branches each. The default branch and any branch with an open PR are skipped. A branch is listed as _Merged_ or _PR closed_ when its latest PR is done and nothing was pushed to it afterwards, so it's safe to delete, and as _No PR_ when it never had one and its last commit is 14+ days old. A branch pushed to after its PR closed counts as having no PR. The list is kept for 15 minutes; Refresh, and Push or closed Pull request webhooks, refetch it.
+
 ### Fix with Claude
 
 Issue rows in **Assigned to you** and **Untriaged issues** have a ✦ button. It opens a comment starting with `@claude` that you can edit, and posts it on the issue. The [Claude GitHub Action](https://github.com/anthropics/claude-code-action) then picks it up and works on a fix. When the popover opens, the Hub checks that repo's `.github/workflows` for the Action. If it's missing, the popover says so and won't post, because nothing would answer. Set the Action up by running `/install-github-app` in Claude Code in that repo.
@@ -55,7 +60,7 @@ This is the only write, so it needs write access to issues: **Issues: Read and w
 
 ### Caching
 
-The Hub Durable Object is the only cache. It keeps the PR/issue inbox (a single GraphQL request) for about a minute the last security scan for 15 minutes, and stars & followers for five minutes. **Refresh** refetches the inbox and stars & followers; webhook events also expire it, so the next page load is fresh. In the browser, TanStack Query shares each response across components.
+The Hub Durable Object is the only cache. It keeps the PR/issue inbox (a single GraphQL request) for about a minute the last security scan for 15 minutes, stars & followers for five minutes, and stale branches for 15. **Refresh** refetches the inbox, stars & followers and stale branches; webhook events also expire it, so the next page load is fresh. In the browser, TanStack Query shares each response across components.
 
 ## Deploying to Cloudflare
 
@@ -65,13 +70,13 @@ Deployed, the app is one Cloudflare Worker. You sign in with GitHub, and changes
 
 The browser app is a static Vite + React SPA. The Worker (`src/worker/index.ts`, Hono) never renders HTML; it handles:
 
-| Path                                                                              | What it does                                                                                                                 |
-| --------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| `/auth/login`, `/auth/callback`, `/auth/logout`                                   | GitHub App OAuth. Only logins in `ALLOWED_LOGINS` get a session (a signed, HttpOnly cookie). Tokens never reach the browser. |
-| `/api/github/webhook`                                                             | GitHub App webhooks, verified with `X-Hub-Signature-256`. The only path that doesn't need a session.                         |
-| `/api/inbox`, `/api/security`, `/api/rate-limits`, `/api/refresh`, `/api/session` | JSON for the app, each a single call to the Hub. Typed end to end with Hono RPC (`src/client/api.ts`).                       |
-| `/api/live`                                                                       | The dashboard's WebSocket.                                                                                                   |
-| everything else                                                                   | The SPA's static files, behind the session check.                                                                            |
+| Path                                                                                               | What it does                                                                                                                 |
+| -------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `/auth/login`, `/auth/callback`, `/auth/logout`                                                    | GitHub App OAuth. Only logins in `ALLOWED_LOGINS` get a session (a signed, HttpOnly cookie). Tokens never reach the browser. |
+| `/api/github/webhook`                                                                              | GitHub App webhooks, verified with `X-Hub-Signature-256`. The only path that doesn't need a session.                         |
+| `/api/inbox`, `/api/security`, `/api/branches`, `/api/rate-limits`, `/api/refresh`, `/api/session` | JSON for the app, each a single call to the Hub. Typed end to end with Hono RPC (`src/client/api.ts`).                       |
+| `/api/live`                                                                                        | The dashboard's WebSocket.                                                                                                   |
+| everything else                                                                                    | The SPA's static files, behind the session check.                                                                            |
 
 The **Hub** Durable Object (`src/edge/hub.ts`) holds your OAuth tokens and refreshes them. Refresh tokens are single-use, so there's exactly one place that refreshes. It also holds the open tabs' WebSockets, which hibernate so idle tabs cost nothing, and it turns changes into small updates:
 

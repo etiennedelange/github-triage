@@ -41,6 +41,7 @@ export function LiveInbox({
   contextLine,
   securityStat,
   securityPanel,
+  branchesPanel,
   activityPanel,
 }: {
   inbox: Inbox;
@@ -49,6 +50,7 @@ export function LiveInbox({
   contextLine: ReactNode;
   securityStat: ReactNode;
   securityPanel: ReactNode;
+  branchesPanel: ReactNode;
   activityPanel: ReactNode;
 }) {
   useLiveConnection(enabled, inbox.fetchedAt);
@@ -177,6 +179,7 @@ export function LiveInbox({
             <IssueRow key={rowKey(i.url, untriaged.live, returned)} live={untriaged.live.has(i.url) || returned.has(i.url)} issue={i} />
           ))}
         </Panel>
+        {branchesPanel}
         {activityPanel}
       </div>
     </div>

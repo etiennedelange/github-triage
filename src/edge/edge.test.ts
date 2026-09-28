@@ -183,9 +183,9 @@ describe("webhook → changes", () => {
     expect(changesFor("check_suite", { action: "requested", repository, check_suite })).toEqual([]);
   });
 
-  it("rechecks open PRs only when the default branch moves", () => {
+  it("rechecks open PRs only when the default branch moves, and stale branches on any other push", () => {
     expect(changesFor("push", { ref: "refs/heads/main", repository })).toEqual([{ kind: "repo-prs", repo: "acme/api" }]);
-    expect(changesFor("push", { ref: "refs/heads/feature", repository })).toEqual([]);
+    expect(changesFor("push", { ref: "refs/heads/feature", repository })).toEqual([{ kind: "branches" }]);
   });
 
   it("turns the Claude Action's comment, branch and PR into run progress", () => {
@@ -199,9 +199,10 @@ describe("webhook → changes", () => {
     ).toEqual([{ kind: "subject", key: "acme/api#3" }]);
     const ref = "refs/heads/claude/issue-3-20260928-1200";
     expect(changesFor("push", { ref, repository })).toEqual([
+      { kind: "branches" },
       { kind: "claude", signal: { kind: "branch", repo: "acme/api", number: 3, branch: "claude/issue-3-20260928-1200" } },
     ]);
-    expect(changesFor("push", { ref, deleted: true, repository })).toEqual([]);
+    expect(changesFor("push", { ref, deleted: true, repository })).toEqual([{ kind: "branches" }]);
     const pull_request = { number: 8, html_url: "https://github.com/acme/api/pull/8", head: { ref: "claude/issue-3-20260928-1200" } };
     expect(changesFor("pull_request", { action: "opened", repository, pull_request })).toEqual([
       { kind: "subject", key: "acme/api#8" },
