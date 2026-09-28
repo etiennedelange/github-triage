@@ -1,7 +1,8 @@
-import { CircleHelp, GitBranch, LogOut, ShieldAlert, Star, TriangleAlert, X } from "lucide-react";
+import { CircleHelp, GitBranch, LogOut, RotateCw, ShieldAlert, Star, TriangleAlert, X } from "lucide-react";
 
 import { useActivity, useBranches, useInbox, useRateLimits, useSecurity, useSession } from "@/client/api";
 import { AppLink, useRepoFilter } from "@/client/url";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { Inbox, RateLimits } from "@/lib/github/inbox";
 import type { Failure } from "@/lib/github/result";
@@ -9,7 +10,7 @@ import type { SecurityReport } from "@/lib/github/security";
 import { ago, filterByRepo, STALE_DAYS, type AlertSource } from "@/lib/triage";
 import { cn } from "@/lib/utils";
 
-import { LiveInbox, LiveSecurityPanel, LiveSecurityStat, Stat } from "./live-inbox";
+import { LiveInbox, LiveSecurityPanel } from "./live-inbox";
 import { Panel, PanelSkeleton } from "./panel";
 import { ActivityRow, BranchRow, SOURCE, TONE } from "./rows";
 
@@ -24,8 +25,9 @@ export function Dashboard() {
   const oauth = session.data?.oauth ?? false;
 
   if (inbox.isPending) return <DashboardSkeleton />;
-  if (inbox.isError) return <ErrorCard error={{ kind: "unexpected", message: inbox.error.message }} oauth={oauth} />;
-  if (!inbox.data.ok) return <ErrorCard error={inbox.data.error} oauth={oauth} />;
+  const retry = () => void inbox.refetch();
+  if (inbox.isError) return <ErrorCard error={{ kind: "unexpected", message: inbox.error.message }} oauth={oauth} onRetry={retry} />;
+  if (!inbox.data.ok) return <ErrorCard error={inbox.data.error} oauth={oauth} onRetry={retry} />;
   const data = inbox.data.data;
 
   // Panels overlay live updates on this snapshot.
@@ -35,7 +37,6 @@ export function Dashboard() {
       repo={repo}
       live
       contextLine={<ContextLine inbox={data} repo={repo} oauth={oauth} />}
-      securityStat={<SecurityStat repo={repo} />}
       securityPanel={<SecurityPanel repo={repo} oauth={oauth} />}
       branchesPanel={<BranchesPanel repo={repo} oauth={oauth} />}
       activityPanel={<ActivityPanel repo={repo} oauth={oauth} />}
@@ -58,8 +59,8 @@ function ContextLine({ inbox, repo, oauth }: { inbox: Inbox; repo?: string; oaut
           {repo} <X aria-label="Clear filter" className="size-3" />
         </AppLink>
       )}
-      {/* Last in the row, so nothing moves when it loads. */}
-      <ApiBudgets />
+      {/* Only when running low; the status bar always has them (on wider screens). Last in the row, so nothing moves when it loads. */}
+      <ApiBudgets onlyLow />
       {oauth && (
         // A plain form post to the Worker: POST so a prefetch can't sign you out.
         <form action="/auth/logout" method="post" className="ml-auto">
@@ -72,10 +73,11 @@ function ContextLine({ inbox, repo, oauth }: { inbox: Inbox; repo?: string; oaut
   );
 }
 
-function ApiBudgets() {
+export function ApiBudgets({ onlyLow }: { onlyLow?: boolean }) {
   const { data: result } = useRateLimits();
   if (!result?.ok) return null;
   const { graphql, rest } = result.data;
+  if (onlyLow && !isLow(graphql) && !isLow(rest)) return null;
   return (
     <span className="inline-flex items-center gap-x-2">
       <Budget name="GraphQL" hint="PR & issue panels" {...graphql} />
@@ -85,11 +87,13 @@ function ApiBudgets() {
   );
 }
 
+const isLow = (b: RateLimits["rest"]) => b.remaining < b.limit * 0.1;
+
 function Budget({ name, hint, remaining, limit, resetAt }: { name: string; hint: string } & RateLimits["rest"]) {
   return (
     <span
       title={`${name} API (${hint}): ${remaining.toLocaleString()} of ${limit.toLocaleString()} left this hour. Resets ${new Date(resetAt).toLocaleTimeString()}.`}
-      className={cn("tabular-nums", remaining < limit * 0.1 && "text-destructive")}
+      className={cn("tabular-nums", isLow({ remaining, limit, resetAt }) && "text-destructive")}
     >
       {name} {remaining.toLocaleString()}/{limit.toLocaleString()}
     </span>
@@ -98,19 +102,8 @@ function Budget({ name, hint, remaining, limit, resetAt }: { name: string; hint:
 
 // ---------- Security ----------
 
-function SecurityStat({ repo }: { repo?: string }) {
-  const { data: result, isPending } = useSecurity();
-  if (isPending) return <Stat href="#security" label="Security alerts" value="…" />;
-  if (result?.ok) return <LiveSecurityStat report={result.data} repo={repo} />;
-  return result?.error.kind === "scanning" ? (
-    <Stat href="#security" label="Security alerts" value="…" sub="Scanning" />
-  ) : (
-    <Stat href="#security" label="Security alerts" value="!" sub="Couldn't load" tone="danger" />
-  );
-}
-
 function SecurityPanel({ repo, oauth }: { repo?: string; oauth: boolean }) {
-  const { data: result, isError, error } = useSecurity();
+  const { data: result, isError, error, refetch } = useSecurity();
   if (!result && !isError) return <PanelSkeleton rows={5} />;
   if (!result?.ok) {
     const failure: Failure = result ? result.error : { kind: "unexpected", message: error?.message ?? "Request failed" };
@@ -120,7 +113,7 @@ function SecurityPanel({ repo, oauth }: { repo?: string; oauth: boolean }) {
           {failure.kind === "scanning" ? (
             <p className="text-sm text-muted-foreground">{failure.message}</p>
           ) : (
-            <ErrorCard error={failure} compact oauth={oauth} />
+            <ErrorCard error={failure} compact oauth={oauth} onRetry={() => void refetch()} />
           )}
         </li>
       </Panel>
@@ -181,14 +174,14 @@ function SecurityPanel({ repo, oauth }: { repo?: string; oauth: boolean }) {
 // ---------- Stale branches ----------
 
 function BranchesPanel({ repo, oauth }: { repo?: string; oauth: boolean }) {
-  const { data: result, isError, error } = useBranches();
+  const { data: result, isError, error, refetch } = useBranches();
   if (!result && !isError) return <PanelSkeleton rows={3} />;
   if (!result?.ok) {
     const failure: Failure = result ? result.error : { kind: "unexpected", message: error?.message ?? "Request failed" };
     return (
       <Panel quiet id="branches" icon={GitBranch} title="Stale branches">
         <li className="p-3">
-          <ErrorCard error={failure} compact oauth={oauth} />
+          <ErrorCard error={failure} compact oauth={oauth} onRetry={() => void refetch()} />
         </li>
       </Panel>
     );
@@ -223,14 +216,14 @@ function BranchesPanel({ repo, oauth }: { repo?: string; oauth: boolean }) {
 // ---------- Stars & followers ----------
 
 function ActivityPanel({ repo, oauth }: { repo?: string; oauth: boolean }) {
-  const { data: result, isError, error } = useActivity();
+  const { data: result, isError, error, refetch } = useActivity();
   if (!result && !isError) return <PanelSkeleton rows={3} />;
   if (!result?.ok) {
     const failure: Failure = result ? result.error : { kind: "unexpected", message: error?.message ?? "Request failed" };
     return (
       <Panel quiet id="activity" icon={Star} title="Stars & followers">
         <li className="p-3">
-          <ErrorCard error={failure} compact oauth={oauth} />
+          <ErrorCard error={failure} compact oauth={oauth} onRetry={() => void refetch()} />
         </li>
       </Panel>
     );
@@ -279,12 +272,16 @@ function ActivityPanel({ repo, oauth }: { repo?: string; oauth: boolean }) {
 
 // ---------- States ----------
 
-function ErrorCard({ error, compact, oauth }: { error: Failure; compact?: boolean; oauth: boolean }) {
+/**
+ * Inside a panel (`compact`) it's plain content, not a card within the card. It says what went
+ * wrong in words, keeps GitHub's raw message behind Details, and offers a retry.
+ */
+function ErrorCard({ error, compact, oauth, onRetry }: { error: Failure; compact?: boolean; oauth: boolean; onRetry?: () => void }) {
   const noToken = error.kind === "no-token";
-  const title = noToken ? "Connect GitHub" : error.status === 401 ? "GitHub rejected the token" : "Couldn't load from GitHub";
+  const box = compact ? "text-sm" : "mx-auto max-w-xl rounded-xl border bg-card p-6";
   if (noToken && oauth) {
     return (
-      <div role="alert" className={cn("rounded-xl border bg-card", compact ? "p-3 text-sm" : "mx-auto max-w-xl p-6")}>
+      <div role="alert" className={box}>
         <div className="flex items-center gap-2 font-semibold">
           <CircleHelp aria-hidden className="size-4 text-muted-foreground" />
           Sign in again
@@ -302,26 +299,50 @@ function ErrorCard({ error, compact, oauth }: { error: Failure; compact?: boolea
       </div>
     );
   }
-  return (
-    <div role="alert" className={cn("rounded-xl border bg-card", compact ? "p-3 text-sm" : "mx-auto max-w-xl p-6")}>
-      <div className="flex items-center gap-2 font-semibold">
-        <CircleHelp aria-hidden className="size-4 text-muted-foreground" />
-        {title}
-      </div>
-      {noToken ? (
-        <div className="mt-2 space-y-2 text-sm text-muted-foreground">
-          <p>
-            Local development reads GitHub with your own token, server-side only. Put it in{" "}
-            <code className="font-mono text-foreground">.dev.vars</code> as{" "}
-            <code className="font-mono text-foreground">GITHUB_TOKEN=…</code> (for example{" "}
-            <code className="font-mono text-foreground">gh auth token</code>, with{" "}
-            <code className="font-mono text-foreground">security_events</code> for security alerts) and restart{" "}
-            <code className="font-mono text-foreground">pnpm dev</code>.
-          </p>
+  if (noToken) {
+    return (
+      <div role="alert" className={box}>
+        <div className="flex items-center gap-2 font-semibold">
+          <CircleHelp aria-hidden className="size-4 text-muted-foreground" />
+          Connect GitHub
         </div>
-      ) : (
-        <p className="mt-2 font-mono text-xs break-words text-muted-foreground">{error.message}</p>
-      )}
+        <p className="mt-2 text-sm text-muted-foreground">
+          Local development reads GitHub with your own token, server-side only. Put it in{" "}
+          <code className="font-mono text-foreground">.dev.vars</code> as <code className="font-mono text-foreground">GITHUB_TOKEN=…</code>{" "}
+          (for example <code className="font-mono text-foreground">gh auth token</code>, with{" "}
+          <code className="font-mono text-foreground">security_events</code> for security alerts) and restart{" "}
+          <code className="font-mono text-foreground">pnpm dev</code>.
+        </p>
+      </div>
+    );
+  }
+  const rejected = error.status === 401;
+  const explain = rejected
+    ? "The token was revoked or has expired. Sign in again, or replace GITHUB_TOKEN in local mode."
+    : error.kind === "github"
+      ? `GitHub returned an error${error.status ? ` (${error.status})` : ""}. It's often temporary.`
+      : error.message.startsWith("Unexpected GitHub response")
+        ? "GitHub answered in a shape this dashboard doesn't expect."
+        : "The request didn't complete. Check your connection, then try again.";
+  return (
+    <div role="alert" className={box}>
+      <div className="flex items-center gap-2 font-semibold">
+        <TriangleAlert aria-hidden className="size-4 text-destructive" />
+        {rejected ? "GitHub rejected the token" : "Couldn't load from GitHub"}
+      </div>
+      <p className="mt-1 text-sm text-muted-foreground">{explain}</p>
+      <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
+        {onRetry && (
+          <Button variant="outline" size="xs" onClick={onRetry}>
+            <RotateCw data-icon="inline-start" />
+            Try again
+          </Button>
+        )}
+        <details className="min-w-0 text-xs text-muted-foreground">
+          <summary className="cursor-pointer hover:text-foreground">Details</summary>
+          <p className="mt-1 font-mono break-words">{error.message}</p>
+        </details>
+      </div>
     </div>
   );
 }
@@ -330,14 +351,14 @@ export function DashboardSkeleton() {
   return (
     <div className="space-y-3" aria-busy aria-label="Loading">
       <Skeleton className="h-4 w-48" />
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6">
-        {Array.from({ length: 6 }, (_, i) => (
-          <Skeleton key={i} className="h-[3.25rem] rounded-xl" />
+      <div className="flex gap-1.5">
+        {Array.from({ length: 3 }, (_, i) => (
+          <Skeleton key={i} className="h-8 w-40 rounded-lg" />
         ))}
       </div>
-      <div className="grid gap-3 lg:grid-cols-2">
-        {Array.from({ length: 8 }, (_, i) => (
-          <PanelSkeleton key={i} />
+      <div className="gap-3 lg:columns-2 [&>*]:mb-3 [&>*]:break-inside-avoid">
+        {[4, 4, 4, 2, 2, 2, 2, 2].map((rows, i) => (
+          <PanelSkeleton key={i} rows={rows} />
         ))}
       </div>
     </div>

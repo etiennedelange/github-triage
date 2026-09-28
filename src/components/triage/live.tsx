@@ -30,6 +30,8 @@ type State = {
   downSince?: number;
   /** A newer build was deployed than the one this tab is running. */
   outdated?: boolean;
+  /** The latest change, in words, for screen readers (see LiveAnnouncer). */
+  announcement?: string;
 };
 
 const OFF: State = { status: "off", items: new Map(), alerts: new Map(), unseen: new Set(), returned: new Map() };
@@ -51,9 +53,12 @@ function showUnseenInTitle(n: number) {
   document.title = n ? `(${n}) ${baseTitle}` : baseTitle;
 }
 
-/** A patch for `url` arrived: if nobody can see it land, remember it for when they're back. */
-function markIfHidden(url: string) {
-  if (document.visibilityState !== "hidden") return;
+/**
+ * A patch for `url` arrived: if nobody can see it land, remember it for when they're back;
+ * if they can, say what changed for anyone who can't see the row glow.
+ */
+function markIfHidden(url: string, words: string) {
+  if (document.visibilityState !== "hidden") return update((s) => ({ ...s, announcement: words }));
   update((s) => (s.unseen.has(url) ? s : { ...s, unseen: new Set(s.unseen).add(url) }));
 }
 
@@ -148,7 +153,7 @@ function receive(msg: ServerMessage) {
       const same = prev && JSON.stringify(prev.item) === JSON.stringify(item) && prev.sections.join() === sections.join();
       return same ? s : { ...s, items: new Map(s.items).set(item.url, { at, item, sections }) };
     });
-    markIfHidden(item.url);
+    markIfHidden(item.url, `Updated: ${item.title}, ${item.repo}`);
   } else if (msg.type === "gone") {
     update((s) => {
       const items = new Map(s.items);
@@ -157,7 +162,7 @@ function receive(msg: ServerMessage) {
     });
   } else if (msg.type === "alert") {
     update((s) => ({ ...s, alerts: new Map(s.alerts).set(msg.alert.url, { at: msg.at, alert: msg.alert }) }));
-    markIfHidden(msg.alert.url);
+    markIfHidden(msg.alert.url, `Security alert: ${msg.alert.title}, ${msg.alert.repo}`);
   } else if (msg.type === "alert-gone") {
     update((s) => ({ ...s, alerts: new Map(s.alerts).set(msg.url, { at: msg.at, alert: null }) }));
   } else if (msg.type === "activity") {
@@ -287,14 +292,24 @@ export function LiveStatus() {
         )}
       />
       {status === "live" ? (
-        <span className="hidden sm:inline">Live</span>
+        <span>Live</span>
       ) : status === "connecting" ? (
-        <span className="hidden sm:inline">Connecting</span>
+        <span>Connecting</span>
       ) : (
         // Offline is always named: it's the one state where the board may be out of date.
         <span>Offline{since && <span className="hidden sm:inline"> · current as of {since}</span>}</span>
       )}
     </span>
+  );
+}
+
+/** Reads each live change aloud, politely: the glow on a row says nothing to a screen reader. */
+export function LiveAnnouncer() {
+  const { announcement } = useLive();
+  return (
+    <div aria-live="polite" className="sr-only">
+      {announcement}
+    </div>
   );
 }
 

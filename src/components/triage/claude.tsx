@@ -1,10 +1,9 @@
-import { Sparkles } from "lucide-react";
+import { MessageSquarePlus, Sparkles } from "lucide-react";
 import { useState } from "react";
 
 import { requestClaude, useClaudeRuns, useClaudeSetup } from "@/client/api";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { claudeKey, defaultPrompt, runLink, TRIGGER, type ClaudeRun, type ClaudeState, type ClaudeStatus } from "@/lib/claude";
 import type { Failure } from "@/lib/github/result";
 import type { Issue } from "@/lib/triage";
@@ -12,8 +11,9 @@ import type { Issue } from "@/lib/triage";
 import { Pill, type Tone } from "./rows";
 
 /**
- * "Fix with Claude" on an issue row: a button that opens an editable @claude comment, or,
- * once you've asked, where the run has got to.
+ * "Ask @claude" on an issue row: a button that opens an editable @claude comment, or, once
+ * you've asked, where the run has got to. It's the one place the dashboard writes to GitHub,
+ * so it only posts what you've read and confirmed.
  */
 export function ClaudeAction({ issue }: { issue: Issue }) {
   const { data } = useClaudeRuns();
@@ -29,7 +29,7 @@ export function ClaudeAction({ issue }: { issue: Issue }) {
 
 const STATUS: Record<ClaudeStatus["state"], { label: string; tone: Tone; hint: string }> = {
   asked: { label: "Asked Claude", tone: "muted", hint: "An @claude comment is waiting for the Claude Action to pick it up" },
-  working: { label: "Claude working", tone: "info", hint: "The Claude Action is working on the latest @claude request" },
+  working: { label: "Claude working", tone: "warning", hint: "The Claude Action is working on the latest @claude request" },
   done: { label: "Claude replied", tone: "success", hint: "The Claude Action finished the latest @claude request" },
   error: { label: "Claude failed", tone: "danger", hint: "The Claude Action hit an error on the latest @claude request" },
 };
@@ -49,7 +49,7 @@ export function ClaudeStatusPill({ status }: { status: ClaudeStatus }) {
 
 const STATE: Record<ClaudeState, { label: string; tone: Tone; hint: string }> = {
   requested: { label: "Asked Claude", tone: "muted", hint: "Comment posted; waiting for the Claude Action to pick it up" },
-  working: { label: "Claude working", tone: "info", hint: "The Claude Action is working on it" },
+  working: { label: "Claude working", tone: "warning", hint: "The Claude Action is working on it" },
   branch: { label: "Branch ready", tone: "success", hint: "Claude pushed a branch: open it to review and create the PR" },
   pr: { label: "PR opened", tone: "success", hint: "The pull request from Claude's branch" },
 };
@@ -92,18 +92,21 @@ function AskClaude({ issue }: { issue: Issue }) {
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <PopoverTrigger asChild>
-            <Button variant="ghost" size="icon-xs" aria-label="Fix with Claude" className="text-muted-foreground">
-              <Sparkles aria-hidden />
-            </Button>
-          </PopoverTrigger>
-        </TooltipTrigger>
-        <TooltipContent>Fix with Claude</TooltipContent>
-      </Tooltip>
+      <PopoverTrigger asChild>
+        {/* An action, not a status: its own glyph and a label, and on devices with a pointer it
+            stays out of sight until you hover or focus its row (or its popover is open). */}
+        <Button
+          variant="ghost"
+          size="xs"
+          aria-label={`Ask @claude to fix ${issue.repo}#${issue.number}`}
+          className="text-muted-foreground hover:text-foreground data-[state=open]:opacity-100 pointer-fine:opacity-0 pointer-fine:group-focus-within/row:opacity-100 pointer-fine:group-hover/row:opacity-100"
+        >
+          <MessageSquarePlus data-icon="inline-start" />
+          <span className="hidden sm:inline">Ask @claude</span>
+        </Button>
+      </PopoverTrigger>
       <PopoverContent className="space-y-2">
-        <div className="text-sm font-medium">Fix with Claude</div>
+        <div className="text-sm font-medium">Ask @claude to fix this</div>
         <SetupLine setup={setup} repo={issue.repo} />
         <label className="block space-y-1">
           <span className="text-xs text-muted-foreground">

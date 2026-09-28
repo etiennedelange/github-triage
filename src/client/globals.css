@@ -142,6 +142,8 @@
   }
   html {
     @apply font-sans;
+    /* Keep j/k, focus and anchor jumps clear of the sticky status bar (h-8). */
+    scroll-padding-bottom: 2.5rem;
   }
   /* One focus style for every link, chip, tile and button: a solid ring clear of the element. */
   :focus-visible {
