@@ -1,20 +1,21 @@
 // The Worker: GitHub sign-in, the webhook, the live socket and a small JSON API, all on
 // Hono. It never renders HTML; the React app is static files it serves behind the session.
 
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import { csrf } from "hono/csrf";
 import { validator } from "hono/validator";
 import { z } from "zod";
 
 import { handleAuth, sessionLogin, unauthenticated } from "@/edge/auth";
 import { verifyWebhook } from "@/edge/crypto";
-import { hubStub, type EdgeEnv } from "@/edge/env";
+import { hubFor, splitList, type EdgeEnv } from "@/edge/env";
 
 export { Hub } from "@/edge/hub";
 
 type AppEnv = { Bindings: EdgeEnv; Variables: { login: string } };
 
-const hub = (env: EdgeEnv) => hubStub(env);
+/** The signed-in user's Hub. */
+const hub = (c: Context<AppEnv>) => hubFor(c.env, c.get("login"));
 
 /** Local development runs without a GitHub App: allowed only on this machine, never deployed. */
 const isLocalhost = (url: string) => ["localhost", "127.0.0.1", "[::1]"].includes(new URL(url).hostname);
@@ -37,23 +38,23 @@ const api = new Hono<AppEnv>()
   .use(csrf())
   .get("/session", (c) => c.json({ login: c.get("login"), oauth: Boolean(c.env.GITHUB_CLIENT_ID) }))
   .get("/version", (c) => c.json({ build: __BUILD_ID__ }))
-  .get("/inbox", async (c) => c.json(await hub(c.env).getInbox()))
-  .get("/security", async (c) => c.json(await hub(c.env).getSecurity()))
-  .get("/activity", async (c) => c.json(await hub(c.env).getActivity()))
-  .post("/activity", async (c) => c.json(await hub(c.env).getActivity(true)))
-  .get("/branches", async (c) => c.json(await hub(c.env).getBranches()))
-  .post("/branches", async (c) => c.json(await hub(c.env).getBranches(true)))
-  .get("/rate-limits", async (c) => c.json(await hub(c.env).getRateLimits()))
-  .post("/refresh", async (c) => c.json(await hub(c.env).getInbox(true)))
-  .get("/claude", async (c) => c.json(await hub(c.env).getClaudeRuns()))
+  .get("/inbox", async (c) => c.json(await hub(c).getInbox()))
+  .get("/security", async (c) => c.json(await hub(c).getSecurity()))
+  .get("/activity", async (c) => c.json(await hub(c).getActivity()))
+  .post("/activity", async (c) => c.json(await hub(c).getActivity(true)))
+  .get("/branches", async (c) => c.json(await hub(c).getBranches()))
+  .post("/branches", async (c) => c.json(await hub(c).getBranches(true)))
+  .get("/rate-limits", async (c) => c.json(await hub(c).getRateLimits()))
+  .post("/refresh", async (c) => c.json(await hub(c).getInbox(true)))
+  .get("/claude", async (c) => c.json(await hub(c).getClaudeRuns()))
   .get("/claude/setup", validator("query", parse(z.object({ repo: repoName }))), async (c) =>
-    c.json(await hub(c.env).claudeSetup(c.req.valid("query").repo)),
+    c.json(await hub(c).claudeSetup(c.req.valid("query").repo)),
   )
   .post("/claude", validator("json", parse(claudeRequest)), async (c) => {
     const { repo, number, body } = c.req.valid("json");
-    return c.json(await hub(c.env).requestClaude(repo, number, body));
+    return c.json(await hub(c).requestClaude(repo, number, body));
   })
-  .get("/live", (c) => hub(c.env).fetch(c.req.raw));
+  .get("/live", (c) => hub(c).fetch(c.req.raw));
 
 export type ApiType = typeof api;
 
@@ -65,16 +66,20 @@ app.post("/api/github/webhook", async (c) => {
   if (!(await verifyWebhook(c.env.GITHUB_WEBHOOK_SECRET, body, c.req.header("X-Hub-Signature-256") ?? null))) {
     return c.text("Bad signature", 401);
   }
-  // Ack immediately; GitHub times out deliveries after 10s.
-  c.executionCtx.waitUntil(
-    hub(c.env).webhook(c.req.header("X-GitHub-Delivery") ?? "", c.req.header("X-GitHub-Event") ?? "", JSON.parse(body)),
-  );
+  // Ack immediately; GitHub times out deliveries after 10s. Every allowed login's Hub gets it.
+  const [delivery, event, payload] = [c.req.header("X-GitHub-Delivery") ?? "", c.req.header("X-GitHub-Event") ?? "", JSON.parse(body)];
+  for (const login of splitList(c.env.ALLOWED_LOGINS)) c.executionCtx.waitUntil(hubFor(c.env, login).webhook(delivery, event, payload));
   return c.body(null, 202);
 });
 
 app.all("/auth/*", async (c) => {
-  const stub = hub(c.env);
-  const res = await handleAuth(c.req.raw, c.env, { saveTokens: (t) => stub.saveTokens(t), signOut: () => stub.signOut() });
+  const res = await handleAuth(c.req.raw, c.env, {
+    saveTokens: (t) => hubFor(c.env, t.login).saveTokens(t),
+    signOut: async () => {
+      const login = await sessionLogin(c.req.raw, c.env);
+      if (login) await hubFor(c.env, login).signOut();
+    },
+  });
   return res ?? c.notFound();
 });
 

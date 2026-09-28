@@ -10,7 +10,7 @@ import { asResult, MissingTokenError, ScanPendingError, type Result } from "@/li
 import { listInstalledRepos, listOwnedRepos, scanOne, SCANNERS, type SecurityReport } from "@/lib/github/security";
 import { sectionsFor, type AlertSource, type Issue, type PullRequest, type ScannerStatus, type SectionContext } from "@/lib/triage";
 
-import { splitList, type EdgeEnv } from "./env";
+import { HUB_PREFIX, LEGACY_HUB, splitList, type EdgeEnv } from "./env";
 import { changesFor, type SubjectKey } from "./events";
 import { clientHello, type ServerMessage } from "./protocol";
 import { fetchAlert, fetchOpenPrs, fetchRecentlyUpdated, fetchSubjects, fetchTeams, subjectUrls } from "./refetch";
@@ -51,6 +51,9 @@ type SecurityJob = {
   truncated: string[];
 };
 
+/** What a per-login Hub takes over from the legacy Hub: tokens and history. Caches refill. */
+const LEGACY_KEPT = ["tokens", "localLogin", "starLog", "followers", "watchers", "claudeRuns", "securityReport"];
+
 /** Queue keys: a subject ("o/r#12"), or every open PR in a repo ("prs:o/r", rechecked once as "prs2:o/r"). */
 type QueueKey = SubjectKey | `prs:${string}` | `prs2:${string}`;
 
@@ -58,7 +61,7 @@ type Distribute<T> = T extends unknown ? Omit<T, "seq"> : never;
 type Outgoing = Distribute<ServerMessage>;
 
 /**
- * One per deployment (single user). Owns the OAuth tokens, the browsers' WebSockets
+ * One per GitHub login (`hubFor`). Owns the OAuth tokens, the browsers' WebSockets
  * (hibernatable, so idle tabs cost nothing) and the change pipeline:
  * webhook/poll → debounced queue → one batched GraphQL read → per-item deltas.
  * With no tab connected it only notes that something changed.
@@ -73,6 +76,7 @@ export class Hub extends DurableObject<EdgeEnv> {
     const storage = ctx.storage;
     void ctx.blockConcurrencyWhile(async () => {
       this.seq = (await storage.get<number>("seq")) ?? 0;
+      await this.adoptLegacy();
     });
     this.tokens = new TokenKeeper(
       {
@@ -94,6 +98,35 @@ export class Hub extends DurableObject<EdgeEnv> {
   async signOut(): Promise<void> {
     await this.ctx.storage.delete(["tokens", "teams", "inbox", "activity", "branches"]);
     for (const ws of this.ctx.getWebSockets()) ws.close(4001, "Signed out");
+  }
+
+  // ---------- Migration from the single Hub (remove once every deployment has run it) ----------
+
+  /** A per-login Hub's first start: take over the legacy Hub's tokens and history if they're this login's. */
+  private async adoptLegacy(): Promise<void> {
+    const name = this.ctx.id.name;
+    if (!name?.startsWith(HUB_PREFIX) || (await this.ctx.storage.get("adopted"))) return;
+    try {
+      const legacy = this.env.HUB.get(this.env.HUB.idFromName(LEGACY_HUB));
+      const entries = (await legacy.handOver(name.slice(HUB_PREFIX.length))) as Record<string, unknown>;
+      await this.ctx.storage.put({ ...entries, adopted: true });
+    } catch (err) {
+      // Not marked adopted, so the next start tries again.
+      console.error("Couldn't take over the legacy Hub", err);
+    }
+  }
+
+  /** On the legacy Hub: its tokens and history if they belong to `login`, then it forgets everything. */
+  async handOver(login: string): Promise<Record<string, unknown>> {
+    const storage = this.ctx.storage;
+    // Local mode stores no OAuth tokens and signs in as "local".
+    const owner = (await storage.get<StoredTokens>("tokens"))?.login.toLowerCase() ?? "local";
+    if (owner !== login) return {};
+    const kept = Object.fromEntries(await storage.get(LEGACY_KEPT));
+    await storage.deleteAlarm();
+    await storage.deleteAll();
+    for (const ws of this.ctx.getWebSockets()) ws.close(4000, "Moved");
+    return kept;
   }
 
   // ---------- RPC: webhooks ----------
