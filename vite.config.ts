@@ -13,4 +13,6 @@ export default defineConfig({
   // Kept in the environment because this config is evaluated once per build (client, then Worker).
   define: { __BUILD_ID__: JSON.stringify((process.env.BUILD_ID ??= Date.now().toString(36))) },
   resolve: { alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) } },
+  // Node resolves "localhost" to ::1 here, but the devcontainer port forward dials 127.0.0.1.
+  server: { host: "127.0.0.1" },
 });

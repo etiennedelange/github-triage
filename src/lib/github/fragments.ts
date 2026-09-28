@@ -6,7 +6,7 @@ const ITEM_FIELDS = `
   author { login }
   repository { nameWithOwner isArchived }
   labels(first: 5) { nodes { name color } }
-  comments { totalCount }`;
+  comments(last: 3) { totalCount nodes { author { __typename login } url createdAt updatedAt bodyText } }`;
 
 export const ITEM_FRAGMENTS = `
 fragment PR on PullRequest {

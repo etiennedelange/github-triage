@@ -1,4 +1,5 @@
 import {
+  Bot,
   CircleCheck,
   CircleDashed,
   CircleDot,
@@ -30,7 +31,7 @@ import {
   type Severity,
 } from "@/lib/triage";
 import { AppLink } from "@/client/url";
-import { ClaudeAction } from "./claude";
+import { ClaudeAction, ClaudeStatusPill } from "./claude";
 import { cn } from "@/lib/utils";
 
 export const TONE = {
@@ -135,14 +136,49 @@ function CommonMeta({ item }: { item: PullRequest | Issue }) {
       <RepoLink repo={item.repo} />
       <span>{item.author}</span>
       <Age iso={item.updatedAt} />
-      {item.comments > 0 && (
-        <span className="inline-flex items-center gap-0.5" aria-label={`${item.comments} comments`}>
-          <MessageSquare aria-hidden className="size-3" />
-          {item.comments}
-        </span>
-      )}
+      {item.comments > 0 && <Comments item={item} />}
       <Labels labels={item.labels} />
     </>
+  );
+}
+
+/** The comment count, and who commented last: a bot's deploy preview or your @claude shows up here. */
+function Comments({ item }: { item: PullRequest | Issue }) {
+  const last = item.latestComment;
+  const count = (
+    <>
+      <MessageSquare aria-hidden className="size-3" />
+      {item.comments}
+    </>
+  );
+  if (!last) {
+    return (
+      <span className="inline-flex items-center gap-0.5" aria-label={`${item.comments} comments`}>
+        {count}
+      </span>
+    );
+  }
+  const name = last.author.replace(/\[bot\]$/, "");
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <a
+          href={last.url}
+          target="_blank"
+          rel="noreferrer"
+          aria-label={`${item.comments} comments, latest by ${last.author} ${relativeAge(last.at)} ago`}
+          className="-my-1.5 inline-flex min-w-0 items-center gap-1 py-1.5 hover:text-foreground hover:underline"
+        >
+          <span className="inline-flex items-center gap-0.5">{count}</span>
+          {last.bot && <Bot aria-hidden className="size-3 shrink-0" />}
+          <span className="max-w-36 truncate">{name}</span>
+        </a>
+      </TooltipTrigger>
+      <TooltipContent className="max-w-80">
+        <span className="font-medium">{last.author}</span>, {relativeAge(last.at)} ago
+        {last.excerpt && <span className="mt-0.5 block opacity-80">{last.excerpt}</span>}
+      </TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -213,6 +249,7 @@ export function PrRow({ pr, perspective, live }: LiveProp & { pr: PullRequest; p
       }
       trailing={
         <>
+          {pr.claude && <ClaudeStatusPill status={pr.claude} />}
           <Checks state={pr.checks} />
           {perspective === "author" ? (
             <Pill tone={step.tone}>{step.label}</Pill>

@@ -92,6 +92,45 @@ export function pruneRuns(runs: ClaudeRuns, now = Date.now()): ClaudeRuns {
   return Object.fromEntries(Object.entries(runs).filter(([, r]) => now - Date.parse(r.updatedAt) < CLAUDE_RUN_TTL_MS));
 }
 
+// ---------- @claude on a PR or issue, from its comments ----------
+
+/** A comment as rows get it; `author` has REST's "[bot]" suffix for bots. */
+export type ItemComment = {
+  author: string;
+  bot: boolean;
+  url: string;
+  createdAt: string;
+  updatedAt: string;
+  body: string;
+};
+
+/** Where an @claude request on an item has got, from the Action's tracking comment. */
+export type ClaudeStatus = {
+  state: "asked" | "working" | "done" | "error";
+  url: string;
+  at: string;
+};
+
+/**
+ * The newest @claude request among `comments` (oldest first) and the Action's answer to it.
+ * The Action posts one tracking comment per request and edits it as it goes, ending with
+ * "Claude finished…" or "Claude encountered an error…". Covers requests made anywhere,
+ * not just from this app, e.g. "@claude review" typed on GitHub.
+ */
+export function claudeStatus(comments: ItemComment[]): ClaudeStatus | undefined {
+  const ask = comments.findLast((c) => !c.bot && c.body.includes(TRIGGER));
+  const reply = comments.findLast((c) => c.author === CLAUDE_BOT && (!ask || c.createdAt >= ask.createdAt));
+  if (reply) {
+    const state = /\bClaude finished\b/.test(reply.body)
+      ? "done"
+      : /\bClaude encountered an error\b/.test(reply.body)
+        ? "error"
+        : "working";
+    return { state, url: reply.url, at: reply.updatedAt };
+  }
+  return ask && { state: "asked", url: ask.url, at: ask.createdAt };
+}
+
 /** Where the row's status pill links: the PR, else a compare view of the branch, else our comment. */
 export function runLink(run: ClaudeRun): string {
   if (run.prUrl) return run.prUrl;

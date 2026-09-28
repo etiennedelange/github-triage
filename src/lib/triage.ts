@@ -1,8 +1,17 @@
 import { z } from "zod";
 
+import { claudeStatus, type ItemComment } from "@/lib/claude";
+
 // ---------- Pull requests & issues (GraphQL search nodes) ----------
 
 const label = z.object({ name: z.string(), color: z.string() });
+const comment = z.object({
+  author: z.object({ __typename: z.string(), login: z.string() }).nullable(),
+  url: z.string(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  bodyText: z.string(),
+});
 const actor = z.object({ login: z.string() }).nullable();
 // A User (login), a Team (slug + org), or null/other for deleted accounts, bots and mannequins.
 const reviewer = z
@@ -18,7 +27,45 @@ const baseItem = {
   author: actor,
   repository: z.object({ nameWithOwner: z.string(), isArchived: z.boolean() }),
   labels: z.object({ nodes: z.array(label) }),
-  comments: z.object({ totalCount: z.number() }),
+  // Optional: an inbox stored before the Hub asked for them has only the count.
+  comments: z.object({
+    totalCount: z.number(),
+    nodes: z.array(comment).optional(),
+  }),
+};
+
+/** An item's newest comments, oldest first, as the rows use them. */
+function recentComments(nodes: z.infer<typeof comment>[] = []): ItemComment[] {
+  return nodes.map((c) => ({
+    // GraphQL names a bot without the "[bot]" that REST and webhooks add.
+    author: !c.author ? "ghost" : c.author.__typename === "Bot" ? `${c.author.login}[bot]` : c.author.login,
+    bot: c.author?.__typename === "Bot",
+    url: c.url,
+    createdAt: c.createdAt,
+    updatedAt: c.updatedAt,
+    body: c.bodyText,
+  }));
+}
+
+/** What a row shows from the comments: the newest one, and where an @claude request has got. */
+function commentFields(nodes: z.infer<typeof comment>[] | undefined) {
+  const recent = recentComments(nodes);
+  const last = recent.at(-1);
+  return {
+    latestComment: last && {
+      author: last.author,
+      bot: last.bot,
+      url: last.url,
+      at: last.updatedAt,
+      excerpt: excerpt(last.body),
+    },
+    claude: claudeStatus(recent),
+  };
+}
+
+const excerpt = (text: string) => {
+  const flat = text.replace(/\s+/g, " ").trim();
+  return flat.length > 140 ? `${flat.slice(0, 139)}…` : flat;
 };
 
 export const pullRequestNode = z
@@ -53,6 +100,7 @@ export const pullRequestNode = z
     repo: n.repository.nameWithOwner,
     labels: n.labels.nodes,
     comments: n.comments.totalCount,
+    ...commentFields(n.comments.nodes),
     open: n.state === "OPEN" && !n.repository.isArchived,
     // Users by login, teams as "org/slug": what `review-requested:@me` matches against.
     reviewers: n.reviewRequests.nodes.flatMap(({ requestedReviewer: r }) =>
@@ -84,6 +132,7 @@ export const issueNode = z
     repo: n.repository.nameWithOwner,
     labels: n.labels.nodes,
     comments: n.comments.totalCount,
+    ...commentFields(n.comments.nodes),
     open: n.state === "OPEN" && !n.repository.isArchived,
     assignees: n.assignees.nodes.map((a) => a.login),
   }));
