@@ -186,7 +186,7 @@ function ActivityPanel({ repo, oauth }: { repo?: string; oauth: boolean }) {
       </Panel>
     );
   }
-  const { events, stars, followers, followersTrackedSince } = result.data;
+  const { events, stars, followers, followersTrackedSince, warning } = result.data;
   // A repo filter keeps that repo's stars; follows aren't about any repo.
   const shown = repo ? events.filter((e) => e.kind === "star" && e.repo === repo) : events;
   const unknownFollows = events.some((e) => e.kind === "follow" && !e.exact);
@@ -198,11 +198,19 @@ function ActivityPanel({ repo, oauth }: { repo?: string; oauth: boolean }) {
       count={shown.length}
       empty={repo ? "No stars on this repo yet." : "No stars or followers yet."}
       footer={
-        <p>
-          {stars.toLocaleString()} {stars === 1 ? "star" : "stars"} across your repos · {followers.toLocaleString()}{" "}
-          {followers === 1 ? "follower" : "followers"}
-          {unknownFollows && ` · "first seen" follows are dated from when this dashboard noticed them (tracking since ${new Date(followersTrackedSince).toLocaleDateString()})`}
-        </p>
+        <div className="space-y-1">
+          <p>
+            {stars.toLocaleString()} {stars === 1 ? "star" : "stars"} across your repos · {followers.toLocaleString()}{" "}
+            {followers === 1 ? "follower" : "followers"}
+            {unknownFollows && ` · "first seen" follows are dated from when this dashboard noticed them (tracking since ${new Date(followersTrackedSince).toLocaleDateString()})`}
+          </p>
+          {warning && (
+            <p role="status" className={cn("flex items-start gap-1 rounded-md px-1.5 py-1 break-words", TONE.warning)}>
+              <TriangleAlert aria-hidden className="mt-px size-3 shrink-0" />
+              <span>Partly missing: {warning}</span>
+            </p>
+          )}
+        </div>
       }
     >
       {shown.map((e) => (

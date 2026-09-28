@@ -26,6 +26,8 @@ export type Activity = {
   stars: number;
   /** Follows without a known time from before this were there when tracking began: not listed. */
   followersTrackedSince: string;
+  /** GitHub refused part of the query (e.g. a permission the App lacks); the rest still shows. */
+  warning?: string;
   fetchedAt: string;
 };
 
@@ -44,25 +46,32 @@ query ($after: String, $withRepos: Boolean!, $stars: Int!) {
   }
 }`;
 
+// Partial results are fine: anything GitHub refuses comes back null and is skipped.
 const response = z.object({
   viewer: z.object({
     login: z.string(),
-    followers: z.object({
-      totalCount: z.number(),
-      pageInfo: z.object({ hasNextPage: z.boolean(), endCursor: z.string().nullish() }),
-      edges: z.array(z.object({ cursor: z.string(), node: user })),
-    }),
+    followers: z
+      .object({
+        totalCount: z.number(),
+        pageInfo: z.object({ hasNextPage: z.boolean(), endCursor: z.string().nullish() }),
+        edges: z.array(z.object({ cursor: z.string(), node: user.nullable() }).nullable()),
+      })
+      .nullish(),
     repositories: z
       .object({
         nodes: z.array(
-          z.object({
-            nameWithOwner: z.string(),
-            stargazerCount: z.number(),
-            stargazers: z.object({ edges: z.array(z.object({ starredAt: z.string(), node: user })) }),
-          }),
+          z
+            .object({
+              nameWithOwner: z.string(),
+              stargazerCount: z.number(),
+              stargazers: z
+                .object({ edges: z.array(z.object({ starredAt: z.string(), node: user.nullable() }).nullable()) })
+                .nullish(),
+            })
+            .nullable(),
         ),
       })
-      .optional(),
+      .nullish(),
   }),
 });
 
@@ -73,28 +82,34 @@ export type Snapshot = {
   followerCount: number;
   stars: Extract<ActivityEvent, { kind: "star" }>[];
   starCount: number;
+  warning?: string;
 };
 
 /** Your followers (up to 1,000) and the latest stars on each of your repos (up to 100 repos). */
 export async function fetchSnapshot(auth: GitHubAuth): Promise<Snapshot> {
-  const first = response.parse(await graphql(auth, QUERY, { after: null, withRepos: true, stars: STARS_PER_REPO }));
-  const toFollower = (e: { cursor: string; node: ActivityUser }): Follower => ({ ...e.node, followedAt: followedAt(e.cursor) });
-  const followers = first.viewer.followers.edges.map(toFollower);
-  let page = first.viewer.followers.pageInfo;
-  for (let i = 1; i < 10 && page.hasNextPage; i++) {
-    const next = response.parse(await graphql(auth, QUERY, { after: page.endCursor, withRepos: false, stars: 0 }));
-    followers.push(...next.viewer.followers.edges.map(toFollower));
-    page = next.viewer.followers.pageInfo;
+  const warnings = new Set<string>();
+  const opts = { partial: true, onErrors: (m: string) => void warnings.add(m) };
+  const first = response.parse(await graphql(auth, QUERY, { after: null, withRepos: true, stars: STARS_PER_REPO }, opts));
+  type Edge = { cursor: string; node: ActivityUser | null } | null;
+  const toFollowers = (edges: Edge[] = []): Follower[] =>
+    edges.flatMap((e) => (e?.node ? [{ ...e.node, followedAt: followedAt(e.cursor) }] : []));
+  const followers = toFollowers(first.viewer.followers?.edges);
+  let page = first.viewer.followers?.pageInfo;
+  for (let i = 1; i < 10 && page?.hasNextPage; i++) {
+    const next = response.parse(await graphql(auth, QUERY, { after: page.endCursor, withRepos: false, stars: 0 }, opts));
+    followers.push(...toFollowers(next.viewer.followers?.edges));
+    page = next.viewer.followers?.pageInfo;
   }
-  const repos = first.viewer.repositories?.nodes ?? [];
+  const repos = (first.viewer.repositories?.nodes ?? []).filter((r) => r !== null);
   return {
     followers,
-    followerCount: first.viewer.followers.totalCount,
+    followerCount: first.viewer.followers?.totalCount ?? followers.length,
+    warning: warnings.size ? [...warnings].join("; ") : undefined,
     // Your own stars aren't news; the total is GitHub's and still counts them.
     stars: repos.flatMap((r) =>
-      r.stargazers.edges
-        .filter((e) => e.node.login !== first.viewer.login)
-        .map((e) => ({ kind: "star", at: e.starredAt, user: e.node, repo: r.nameWithOwner }) as const),
+      (r.stargazers?.edges ?? []).flatMap((e) =>
+        e?.node && e.node.login !== first.viewer.login ? [{ kind: "star", at: e.starredAt, user: e.node, repo: r.nameWithOwner } as const] : [],
+      ),
     ),
     starCount: repos.reduce((n, r) => n + r.stargazerCount, 0),
   };
@@ -133,5 +148,5 @@ export function toActivity(snap: Snapshot, seen: SeenFollowers, trackedSince: st
     return at ? [{ kind: "follow", at, user, exact: Boolean(followedAt) }] : [];
   });
   const events = [...snap.stars, ...follows].toSorted((a, b) => b.at.localeCompare(a.at)).slice(0, ACTIVITY_KEPT);
-  return { events, followers: snap.followerCount, stars: snap.starCount, followersTrackedSince: trackedSince, fetchedAt };
+  return { events, followers: snap.followerCount, stars: snap.starCount, followersTrackedSince: trackedSince, warning: snap.warning, fetchedAt };
 }
