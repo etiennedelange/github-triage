@@ -1,7 +1,7 @@
 import { ShieldCheck } from "lucide-react";
 
 import { ThemeToggle } from "@/components/theme-toggle";
-import { ApiBudgets, Dashboard, SignOut, Viewer } from "@/components/triage/dashboard";
+import { Account, ApiBudgets, Dashboard } from "@/components/triage/dashboard";
 import { LiveAnnouncer, LiveStatus, NewVersion } from "@/components/triage/live";
 import { FxToggle, RefreshButton } from "@/components/triage/refresh-button";
 import { RefreshFx } from "@/components/triage/refresh-fx";
@@ -21,12 +21,12 @@ export function App() {
         <header className="flex items-center gap-2">
           <ShieldCheck aria-hidden className="size-5" />
           <h1 className="text-base font-semibold tracking-tight whitespace-nowrap">GitHub Triage</h1>
-          <Viewer />
           <div className="ml-auto flex shrink-0 items-center gap-1.5 sm:gap-2">
             <NewVersion />
             <LiveStatus />
             <RefreshButton />
             <ThemeToggle />
+            <Account />
           </div>
         </header>
         <main className="flex-1">
@@ -46,7 +46,6 @@ export function App() {
           <span className="ml-auto hidden sm:inline">
             <ApiBudgets />
           </span>
-          <SignOut />
         </footer>
       </div>
       <Shortcuts />

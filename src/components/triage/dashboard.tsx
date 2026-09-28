@@ -1,8 +1,9 @@
-import { CircleHelp, GitBranch, LogOut, RotateCw, ShieldAlert, Star, TriangleAlert, X } from "lucide-react";
+import { ChevronDown, CircleHelp, GitBranch, LogOut, RotateCw, ShieldAlert, Star, TriangleAlert, X } from "lucide-react";
 
 import { useActivity, useBranches, useInbox, useRateLimits, useSecurity, useSession } from "@/client/api";
 import { AppLink, useRepoFilter } from "@/client/url";
 import { Button } from "@/components/ui/button";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { RateLimits } from "@/lib/github/inbox";
 import type { Failure } from "@/lib/github/result";
@@ -64,32 +65,52 @@ function ContextLine({ repo }: { repo?: string }) {
   );
 }
 
-/** Who's signed in, for the header. Shares the inbox query, so it costs nothing extra. */
-export function Viewer() {
+/**
+ * Who's signed in, at the right end of the header where accounts usually live. Deployed, it
+ * opens a menu with Sign out; local mode has no session to end, so there it's just the avatar.
+ * Shares the inbox query, so it costs nothing extra.
+ */
+export function Account() {
   const { data: result } = useInbox();
+  const { data: session } = useSession();
   if (!result?.ok) return null;
   const { viewer } = result.data;
+  const avatar = <img src={viewer.avatarUrl} alt="" width={20} height={20} className="size-5 rounded-full" />;
+  // Phones need the header room for Live and Refresh, so the login shows from sm up.
+  const login = <span className="hidden max-w-40 truncate sm:inline">@{viewer.login}</span>;
+  if (!session?.oauth) {
+    return (
+      <span title={`Signed in as @${viewer.login}`} className="inline-flex min-w-0 items-center gap-1.5 text-sm text-muted-foreground">
+        {avatar}
+        {login}
+      </span>
+    );
+  }
   return (
-    // Phones need the header for Live and Refresh.
-    <span className="hidden min-w-0 items-center gap-1.5 text-sm text-muted-foreground sm:inline-flex">
-      <img src={viewer.avatarUrl} alt="" width={16} height={16} className="size-4 rounded-full" />
-      <span className="truncate">@{viewer.login}</span>
-    </span>
-  );
-}
-
-/** Deployed mode only: local mode has no session to end. */
-export function SignOut() {
-  const { data: session } = useSession();
-  if (!session?.oauth) return null;
-  return (
-    // A plain form post to the Worker: POST so a prefetch can't sign you out.
-    // ml-auto on phones, where the API budgets that push it right are hidden.
-    <form action="/auth/logout" method="post" className="ml-auto sm:ml-0">
-      <button type="submit" className="-my-1 inline-flex items-center gap-1 py-1 hover:text-foreground">
-        <LogOut aria-hidden className="size-3" /> Sign out
-      </button>
-    </form>
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button variant="ghost" size="sm" aria-label={`Account @${viewer.login}`} className="text-muted-foreground">
+          {avatar}
+          {login}
+          <ChevronDown aria-hidden data-icon="inline-end" className="size-3.5" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-56 space-y-3">
+        <div className="flex items-center gap-2">
+          <img src={viewer.avatarUrl} alt="" width={32} height={32} className="size-8 rounded-full" />
+          <div className="min-w-0 text-sm">
+            <div className="text-xs text-muted-foreground">Signed in as</div>
+            <div className="truncate font-medium">@{viewer.login}</div>
+          </div>
+        </div>
+        {/* A plain form post to the Worker: POST so a prefetch can't sign you out. */}
+        <form action="/auth/logout" method="post">
+          <Button type="submit" variant="outline" size="sm" className="w-full">
+            <LogOut data-icon="inline-start" /> Sign out
+          </Button>
+        </form>
+      </PopoverContent>
+    </Popover>
   );
 }
 
