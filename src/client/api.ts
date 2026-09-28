@@ -59,8 +59,19 @@ export async function refreshAll(): Promise<void> {
 
 // ---------- Fix with Claude ----------
 
-/** Runs you started; the live socket invalidates this when one moves on. */
-export const useClaudeRuns = () => useQuery({ queryKey: ["claude"], queryFn: async () => json(await api.claude.$get()) });
+/**
+ * Runs you started. Webhooks push changes over the live socket; while Claude is still picking
+ * one up or working, poll too, since the Hub then checks GitHub itself (local mode has no webhooks).
+ */
+export const useClaudeRuns = () =>
+  useQuery({
+    queryKey: ["claude"],
+    queryFn: async () => json(await api.claude.$get()),
+    refetchInterval: (q) => {
+      const runs = q.state.data?.ok ? Object.values(q.state.data.data) : [];
+      return runs.some((r) => r.state === "requested" || r.state === "working") ? 30_000 : false;
+    },
+  });
 
 /** Asked when the popover opens, and at most once a minute per repo. */
 export const useClaudeSetup = (repo: string, enabled: boolean) =>

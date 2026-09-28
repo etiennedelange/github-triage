@@ -25,7 +25,7 @@ const STATE: Record<ClaudeState, { label: string; tone: Tone; hint: string }> = 
   requested: { label: "Asked Claude", tone: "muted", hint: "Comment posted; waiting for the Claude Action to pick it up" },
   working: { label: "Claude working", tone: "info", hint: "The Claude Action is working on it" },
   branch: { label: "Branch ready", tone: "success", hint: "Claude pushed a branch: open it to review and create the PR" },
-  pr: { label: "PR open", tone: "success", hint: "Claude's pull request" },
+  pr: { label: "PR opened", tone: "success", hint: "The pull request from Claude's branch" },
 };
 
 function RunPill({ run }: { run: ClaudeRun }) {

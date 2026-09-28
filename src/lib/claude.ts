@@ -17,6 +17,8 @@ export type ClaudeRun = {
   /** The Action's branch, once pushed. */
   branch?: string;
   prUrl?: string;
+  /** Last time the Hub asked GitHub directly, for runs webhooks can't advance (local mode, missed deliveries). */
+  checkedAt?: string;
 };
 
 /** Runs by "owner/name#number", as the Hub stores them and `/api/claude` returns them. */
@@ -38,6 +40,30 @@ export function claudeBranchIssue(branch: string): number | undefined {
   const m = /^claude\/issue-(\d+)-/.exec(branch);
   return m ? Number(m[1]) : undefined;
 }
+
+/**
+ * When the Action created the branch, from its `YYYYMMDD-HHMM` suffix: the runner's clock, which
+ * is UTC on GitHub-hosted runners. Epoch ms, or undefined for a name that doesn't follow it.
+ */
+export function claudeBranchTime(branch: string): number | undefined {
+  const m = /-(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})$/.exec(branch);
+  return m ? Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]) : undefined;
+}
+
+/**
+ * The newest of an issue's Claude branches that the Action made for this run, not an earlier
+ * one: created no earlier than the minute the run was requested.
+ */
+export function branchForRun(run: ClaudeRun, branches: string[]): string | undefined {
+  const since = Math.floor(Date.parse(run.requestedAt) / 60_000) * 60_000;
+  return branches
+    .filter((b) => claudeBranchIssue(b) === run.number && (claudeBranchTime(b) ?? -Infinity) >= since)
+    .toSorted()
+    .at(-1);
+}
+
+/** Runs still worth asking GitHub about: not at a PR yet, and requested within the last day. */
+export const isActiveRun = (run: ClaudeRun, now = Date.now()) => run.state !== "pr" && now - Date.parse(run.requestedAt) < 86_400_000;
 
 /** A workflow file that runs the Action. */
 export const usesClaudeAction = (workflow: string) => /\buses:\s*["']?anthropics\/claude-code-action@/.test(workflow);

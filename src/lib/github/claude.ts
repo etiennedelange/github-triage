@@ -3,7 +3,7 @@
 
 import { z } from "zod";
 
-import { usesClaudeAction } from "@/lib/claude";
+import { branchForRun, CLAUDE_BOT, usesClaudeAction, type ClaudeRun, type ClaudeSignal } from "@/lib/claude";
 
 import { GitHubError, rest, type GitHubAuth } from "./http";
 
@@ -42,4 +42,34 @@ const comment = z.object({ html_url: z.string() });
 /** Posts on an issue (or PR) conversation; returns the comment's URL. */
 export async function postIssueComment(auth: GitHubAuth, repo: string, number: number, body: string): Promise<string> {
   return comment.parse(await rest(auth, `/repos/${repo}/issues/${number}/comments`, { body })).html_url;
+}
+
+const commentAuthors = z.array(z.object({ user: z.object({ login: z.string() }).nullable() }));
+const refs = z.array(z.object({ ref: z.string() }));
+const pulls = z.array(z.object({ html_url: z.string() }));
+
+/**
+ * Where a run has got, read from GitHub instead of webhooks: Claude's comment, its branch, a
+ * PR from the branch. Only asks about the steps the run hasn't reached (at most three calls).
+ */
+export async function fetchRunProgress(auth: GitHubAuth, run: ClaudeRun): Promise<ClaudeSignal[]> {
+  const { repo, number } = run;
+  const signals: ClaudeSignal[] = [];
+  if (run.state === "requested") {
+    const since = encodeURIComponent(run.requestedAt);
+    const comments = commentAuthors.parse(await rest(auth, `/repos/${repo}/issues/${number}/comments?since=${since}&per_page=100`));
+    if (comments.some((c) => c.user?.login === CLAUDE_BOT)) signals.push({ kind: "working", repo, number });
+  }
+  let branch = run.branch;
+  if (!branch) {
+    const found = refs.parse(await rest(auth, `/repos/${repo}/git/matching-refs/heads/claude/issue-${number}-`));
+    branch = branchForRun(run, found.map((r) => r.ref.replace(/^refs\/heads\//, "")));
+    if (branch) signals.push({ kind: "branch", repo, number, branch });
+  }
+  if (branch) {
+    const head = encodeURIComponent(`${repo.split("/")[0]}:${branch}`);
+    const [pr] = pulls.parse(await rest(auth, `/repos/${repo}/pulls?head=${head}&state=all&per_page=1`));
+    if (pr) signals.push({ kind: "pr", repo, number, url: pr.html_url });
+  }
+  return signals;
 }
