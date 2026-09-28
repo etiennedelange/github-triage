@@ -75,7 +75,8 @@
   --info: oklch(0.522 0.15 250);
   --border: oklch(0.922 0 0);
   --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
+  /* Focus ring: ink, not the shadcn light grey at 50%, which all but vanished on white. */
+  --ring: oklch(0.205 0 0);
   --chart-1: oklch(0.87 0 0);
   --chart-2: oklch(0.556 0 0);
   --chart-3: oklch(0.439 0 0);
@@ -116,7 +117,7 @@
   --info: oklch(0.72 0.13 250);
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
+  --ring: oklch(0.922 0 0);
   --chart-1: oklch(0.87 0 0);
   --chart-2: oklch(0.556 0 0);
   --chart-3: oklch(0.439 0 0);
@@ -142,10 +143,16 @@
   html {
     @apply font-sans;
   }
+  /* One focus style for every link, chip, tile and button: a solid ring clear of the element. */
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
 }
 /* ───────────── Refresh effects (see components/triage/refresh-fx.tsx) ─────────────
-   Driven by [data-fx] + [data-phase] on the RefreshFx wrapper. Per-target stagger
-   comes from --fx-d (panel) and --fx-r (row), set in JS from geometry. Only
+   Driven by [data-fx] + [data-phase] on the RefreshFx wrapper. Landings only play on
+   panels whose content changed ([data-fx-changed]). Per-target stagger comes from --fx-d
+   (panel) and --fx-r (row), set in JS. Only
    transform/opacity/box-shadow and fixed overlays: no layout shift. */
 
 [data-fx-panel] {
@@ -173,59 +180,6 @@
 }
 
 @media (prefers-reduced-motion: no-preference) {
-  /* ── Radar ── */
-  .fx-radar-field {
-    position: absolute;
-    width: 260vmax;
-    height: 260vmax;
-    translate: -50% -50%;
-    mask-image: radial-gradient(circle, #000 0 22%, transparent 38%);
-  }
-  .fx-radar-rings {
-    position: absolute;
-    inset: 0;
-    background: repeating-radial-gradient(
-      circle,
-      transparent 0 calc(9vmax - 1px),
-      color-mix(in oklab, var(--info) 30%, transparent) calc(9vmax - 1px) 9vmax
-    );
-  }
-  .fx-radar-beam {
-    position: absolute;
-    inset: 0;
-    border-radius: 50%;
-    background: conic-gradient(
-      from 0deg,
-      transparent 0deg 290deg,
-      color-mix(in oklab, var(--info) 10%, transparent) 300deg,
-      color-mix(in oklab, var(--info) 40%, transparent) 358deg,
-      color-mix(in oklab, var(--info) 85%, transparent) 359.6deg,
-      transparent 360deg
-    );
-    animation: fx-spin 1.8s linear infinite;
-  }
-  .fx-shockwave {
-    position: absolute;
-    translate: -50% -50%;
-    border-radius: 50%;
-    border: 2px solid var(--info);
-    box-shadow:
-      0 0 24px color-mix(in oklab, var(--info) 60%, transparent),
-      inset 0 0 40px color-mix(in oklab, var(--info) 25%, transparent);
-  }
-  .fx-shockwave-soft {
-    border-width: 1px;
-    box-shadow: none;
-    background: radial-gradient(circle, transparent 60%, color-mix(in oklab, var(--info) 14%, transparent));
-  }
-  [data-fx="radar"][data-phase="landing"] [data-fx-panel] {
-    animation: fx-ping 900ms var(--fx-d, 0ms) cubic-bezier(0.2, 0.8, 0.2, 1) both;
-  }
-  [data-fx="radar"][data-phase="landing"] [data-fx-panel]::after {
-    background: color-mix(in oklab, var(--info) 14%, transparent);
-    animation: fx-flash 700ms var(--fx-d, 0ms) ease-out both;
-  }
-
   /* ── Cascade ── */
   [data-fx="cascade"][data-phase="pending"] [data-fx-panel] > ul,
   [data-fx="cascade"][data-phase="pending"] [data-fx-panel] > span {
@@ -244,10 +198,10 @@
     animation: fx-shimmer 1.3s ease-in-out infinite;
     animation-delay: calc(var(--fx-i, 0) * 80ms);
   }
-  [data-fx="cascade"][data-phase="landing"] [data-fx-panel] {
-    animation: fx-deal 460ms var(--fx-d, 0ms) cubic-bezier(0.2, 0.9, 0.25, 1.12) both;
+  [data-fx="cascade"][data-phase="landing"] [data-fx-changed] {
+    animation: fx-deal 460ms var(--fx-d, 0ms) cubic-bezier(0.16, 1, 0.3, 1) both;
   }
-  [data-fx="cascade"][data-phase="landing"] [data-fx-panel] li {
+  [data-fx="cascade"][data-phase="landing"] [data-fx-changed] li {
     animation: fx-rise 420ms calc(var(--fx-d, 0ms) + 90ms + var(--fx-r, 0ms)) cubic-bezier(0.2, 0.8, 0.2, 1) both;
   }
   [data-fx="cascade"][data-phase="landing"] .fx-odo-reel {
@@ -279,10 +233,10 @@
   .fx-scanline-final {
     background: linear-gradient(to bottom, transparent, color-mix(in oklab, var(--success) 22%, transparent));
   }
-  [data-fx="decrypt"][data-phase="landing"] [data-fx-panel] {
+  [data-fx="decrypt"][data-phase="landing"] [data-fx-changed] {
     animation: fx-phosphor 800ms calc(var(--fx-d, 0ms) + 60ms) ease-out both;
   }
-  [data-fx="decrypt"][data-phase="landing"] [data-fx-panel]::after {
+  [data-fx="decrypt"][data-phase="landing"] [data-fx-changed]::after {
     background: color-mix(in oklab, var(--success) 16%, transparent);
     animation: fx-flash 650ms calc(var(--fx-d, 0ms) + 60ms) ease-out both;
   }
@@ -320,20 +274,6 @@
   }
 }
 
-@keyframes fx-spin {
-  to {
-    rotate: 360deg;
-  }
-}
-@keyframes fx-ping {
-  0% {
-    box-shadow: 0 0 0 0 color-mix(in oklab, var(--info) 65%, transparent);
-    border-color: var(--info);
-  }
-  100% {
-    box-shadow: 0 0 0 14px transparent;
-  }
-}
 @keyframes fx-flash {
   0% {
     opacity: 1;
@@ -365,7 +305,7 @@
 }
 @keyframes fx-odo {
   from {
-    transform: translateY(0);
+    transform: translateY(var(--from, 0));
   }
 }
 @keyframes fx-phosphor {

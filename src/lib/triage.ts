@@ -293,6 +293,12 @@ export function relativeAge(iso: string, now = Date.now()): string {
   return months < 12 ? `${months}mo` : `${Math.floor(months / 12)}y`;
 }
 
+/** For sentences: "just now" rather than "0m ago". */
+export function ago(iso: string, now = Date.now()): string {
+  const age = relativeAge(iso, now);
+  return age === "0m" ? "just now" : `${age} ago`;
+}
+
 export const STALE_DAYS = 14;
 
 export function isStale(iso: string, now = Date.now()): boolean {

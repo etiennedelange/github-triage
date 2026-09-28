@@ -6,7 +6,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import type { Inbox, RateLimits } from "@/lib/github/inbox";
 import type { Failure } from "@/lib/github/result";
 import type { SecurityReport } from "@/lib/github/security";
-import { relativeAge, type AlertSource } from "@/lib/triage";
+import { ago, type AlertSource } from "@/lib/triage";
 import { cn } from "@/lib/utils";
 
 import { LiveInbox, LiveSecurityPanel, LiveSecurityStat, Stat } from "./live-inbox";
@@ -142,7 +142,7 @@ function SecurityPanel({ repo, oauth }: { repo?: string; oauth: boolean }) {
       footer={
         <div className="space-y-1">
           <p>
-            {repos.length} {repos.length === 1 ? "repo" : "repos"} scanned {relativeAge(report.scannedAt)} ago ·{" "}
+            {repos.length} {repos.length === 1 ? "repo" : "repos"} scanned {ago(report.scannedAt)} ·{" "}
             {coverage.map((c, i) => (
               <span key={c.source}>
                 {i > 0 && " · "}
@@ -179,7 +179,7 @@ function ActivityPanel({ repo, oauth }: { repo?: string; oauth: boolean }) {
   if (!result?.ok) {
     const failure: Failure = result ? result.error : { kind: "unexpected", message: error?.message ?? "Request failed" };
     return (
-      <Panel id="activity" icon={Star} title="Stars & followers">
+      <Panel quiet id="activity" icon={Star} title="Stars & followers">
         <li className="p-3">
           <ErrorCard error={failure} compact oauth={oauth} />
         </li>
@@ -192,6 +192,7 @@ function ActivityPanel({ repo, oauth }: { repo?: string; oauth: boolean }) {
   const unknownFollows = events.some((e) => e.kind === "follow" && !e.exact);
   return (
     <Panel
+      quiet
       id="activity"
       icon={Star}
       title="Stars & followers"
