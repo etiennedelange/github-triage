@@ -68,6 +68,10 @@ try {
     await page.locator("#security li a").first().waitFor({ timeout: 60_000 }); // real alert rows, once the Hub's background scan lands
     await page.getByRole("status").filter({ hasText: "Live" }).waitFor();
     await page.evaluate(() => document.fonts.ready);
+    // The whole board: grow the viewport to fit it, so the sticky status bar lands at the real bottom
+    // instead of covering a panel (a fullPage capture still draws it at the first screen's edge).
+    const height = await page.evaluate(() => document.documentElement.scrollHeight);
+    await page.setViewportSize({ width: page.viewportSize()!.width, height });
     await page.screenshot({ path: `${OUT}/dashboard-${theme}.png` });
     console.log(`saved ${OUT}/dashboard-${theme}.png`);
     await page.close();

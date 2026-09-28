@@ -132,7 +132,8 @@ export function openShortcuts() {
 // ---------- Help ----------
 
 const KEYS: [keys: string[], what: string][] = [
-  [["j", "k"], "Next / previous row"],
+  [["j"], "Next row"],
+  [["k"], "Previous row"],
   [["o"], "Open the focused row on GitHub"],
   [["1", "–", "8"], "Jump to a panel"],
   [["/"], "Filter by repository"],
