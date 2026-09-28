@@ -14,6 +14,7 @@ export function Panel({
   aside,
   footer,
   empty,
+  quiet,
   className,
   children,
 }: {
@@ -24,6 +25,8 @@ export function Panel({
   aside?: ReactNode;
   footer?: ReactNode;
   empty?: string;
+  /** For FYI lists (nothing is waiting on you): recessed surface, quieter title. */
+  quiet?: boolean;
   className?: string;
   children?: ReactNode;
 }) {
@@ -33,19 +36,26 @@ export function Panel({
       data-fx-panel
       id={id}
       aria-labelledby={`${id}-title`}
-      className={cn("flex min-w-0 scroll-mt-4 flex-col rounded-xl border bg-card text-card-foreground", className)}
+      className={cn(
+        "flex min-w-0 scroll-mt-4 flex-col rounded-xl border text-card-foreground",
+        quiet ? "bg-transparent" : "bg-card",
+        className,
+      )}
     >
-      <header className="flex min-h-11 items-center gap-2 border-b px-3 py-2">
-        <Icon aria-hidden className="size-4 shrink-0 text-muted-foreground" />
-        <h2 id={`${id}-title`} className="truncate text-sm font-semibold">
-          <FxText text={title} />
-        </h2>
-        {count !== undefined && (
-          <span className="rounded-md bg-muted px-1.5 font-mono text-xs tabular-nums text-muted-foreground">
-            <FxNumber value={count} />
-          </span>
-        )}
-        <div className="ml-auto flex shrink-0 items-center gap-1.5">{aside}</div>
+      {/* The title never truncates: when space runs out, the aside wraps under it instead. */}
+      <header className="flex min-h-11 flex-wrap items-center gap-x-2 gap-y-1.5 border-b px-3 py-2">
+        <span className="flex shrink-0 items-center gap-2">
+          <Icon aria-hidden className="size-4 shrink-0 text-muted-foreground" />
+          <h2 id={`${id}-title`} className={cn("text-sm", quiet ? "font-medium text-muted-foreground" : "font-semibold")}>
+            <FxText text={title} />
+          </h2>
+          {count !== undefined && (
+            <span className="rounded-md bg-muted px-1.5 font-mono text-xs tabular-nums text-muted-foreground">
+              <FxNumber value={count} />
+            </span>
+          )}
+        </span>
+        {aside && <div className="ml-auto flex flex-wrap items-center justify-end gap-1.5">{aside}</div>}
       </header>
       {isEmpty ? (
         <p className="px-3 py-6 text-center text-sm text-muted-foreground">{empty ?? "Nothing here."}</p>

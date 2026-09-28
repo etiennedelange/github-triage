@@ -6,7 +6,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import type { Inbox, RateLimits } from "@/lib/github/inbox";
 import type { Failure } from "@/lib/github/result";
 import type { SecurityReport } from "@/lib/github/security";
-import { relativeAge, type AlertSource } from "@/lib/triage";
+import { ago, type AlertSource } from "@/lib/triage";
 import { cn } from "@/lib/utils";
 
 import { LiveInbox, LiveSecurityPanel, LiveSecurityStat, Stat } from "./live-inbox";
@@ -142,7 +142,7 @@ function SecurityPanel({ repo, oauth }: { repo?: string; oauth: boolean }) {
       footer={
         <div className="space-y-1">
           <p>
-            {repos.length} {repos.length === 1 ? "repo" : "repos"} scanned {relativeAge(report.scannedAt)} ago ·{" "}
+            {repos.length} {repos.length === 1 ? "repo" : "repos"} scanned {ago(report.scannedAt)} ·{" "}
             {coverage.map((c, i) => (
               <span key={c.source}>
                 {i > 0 && " · "}
@@ -179,30 +179,39 @@ function ActivityPanel({ repo, oauth }: { repo?: string; oauth: boolean }) {
   if (!result?.ok) {
     const failure: Failure = result ? result.error : { kind: "unexpected", message: error?.message ?? "Request failed" };
     return (
-      <Panel id="activity" icon={Star} title="Stars & followers">
+      <Panel quiet id="activity" icon={Star} title="Stars & followers">
         <li className="p-3">
           <ErrorCard error={failure} compact oauth={oauth} />
         </li>
       </Panel>
     );
   }
-  const { events, stars, followers, followersTrackedSince } = result.data;
+  const { events, stars, followers, followersTrackedSince, warning } = result.data;
   // A repo filter keeps that repo's stars; follows aren't about any repo.
   const shown = repo ? events.filter((e) => e.kind === "star" && e.repo === repo) : events;
   const unknownFollows = events.some((e) => e.kind === "follow" && !e.exact);
   return (
     <Panel
+      quiet
       id="activity"
       icon={Star}
       title="Stars & followers"
       count={shown.length}
       empty={repo ? "No stars on this repo yet." : "No stars or followers yet."}
       footer={
-        <p>
-          {stars.toLocaleString()} {stars === 1 ? "star" : "stars"} across your repos · {followers.toLocaleString()}{" "}
-          {followers === 1 ? "follower" : "followers"}
-          {unknownFollows && ` · "first seen" follows are dated from when this dashboard noticed them (tracking since ${new Date(followersTrackedSince).toLocaleDateString()})`}
-        </p>
+        <div className="space-y-1">
+          <p>
+            {stars.toLocaleString()} {stars === 1 ? "star" : "stars"} across your repos · {followers.toLocaleString()}{" "}
+            {followers === 1 ? "follower" : "followers"}
+            {unknownFollows && ` · "first seen" follows are dated from when this dashboard noticed them (tracking since ${new Date(followersTrackedSince).toLocaleDateString()})`}
+          </p>
+          {warning && (
+            <p role="status" className={cn("flex items-start gap-1 rounded-md px-1.5 py-1 break-words", TONE.warning)}>
+              <TriangleAlert aria-hidden className="mt-px size-3 shrink-0" />
+              <span>Partly missing: {warning}</span>
+            </p>
+          )}
+        </div>
       }
     >
       {shown.map((e) => (

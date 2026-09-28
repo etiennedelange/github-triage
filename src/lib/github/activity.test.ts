@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { diffFollowers, followedAt, toActivity, type Snapshot } from "./activity";
+import { describeErrors } from "./http";
 
 const user = (login: string) => ({ login, avatarUrl: `a/${login}`, url: `https://github.com/${login}` });
 
@@ -40,5 +41,15 @@ describe("activity", () => {
       ["star", "fan", false],
     ]);
     expect(a).toMatchObject({ followers: 3, stars: 4 });
+  });
+});
+
+describe("GraphQL errors", () => {
+  it("collapses GitHub's per-node repeats into one line with where they hit", () => {
+    const denied = "Resource not accessible by integration";
+    const errors = [0, 1, 2, 3].map((i) => ({ message: denied, path: ["viewer", "followers", "edges", i, "node"] }));
+    expect(describeErrors([...errors, { message: "Other" }])).toBe(
+      `${denied} (4×, at viewer.followers.edges.0.node, viewer.followers.edges.1.node, viewer.followers.edges.2.node, …); Other`,
+    );
   });
 });

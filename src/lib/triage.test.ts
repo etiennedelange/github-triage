@@ -10,6 +10,7 @@ import {
   sectionsFor,
   pullRequestNode,
   relativeAge,
+  ago,
   secretScanningAlert,
   sortAlerts,
   sortByNextStep,
@@ -185,6 +186,8 @@ describe("time helpers", () => {
     expect(relativeAge("2026-09-27T09:00:00Z", now)).toBe("3h");
     expect(relativeAge("2026-09-20T12:00:00Z", now)).toBe("7d");
     expect(relativeAge("2026-06-01T12:00:00Z", now)).toBe("3mo");
+    expect(ago("2026-09-27T11:59:30Z", now)).toBe("just now");
+    expect(ago("2026-09-27T11:55:00Z", now)).toBe("5m ago");
     expect(relativeAge("2024-01-01T00:00:00Z", now)).toBe("2y");
     expect(relativeAge("2026-09-28T00:00:00Z", now)).toBe("0m");
   });

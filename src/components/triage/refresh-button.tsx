@@ -1,15 +1,14 @@
-import { Binary, Layers, Radar, RefreshCw } from "lucide-react";
+import { Binary, Layers, RefreshCw } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { cn } from "@/lib/utils";
 
-import { EFFECTS, setEffect, useEffectChoice, useRefreshFx, type Effect } from "./refresh-fx";
+import { setEffect, useEffectChoice, useRefreshFx, type Effect } from "./refresh-fx";
 
 export function RefreshButton() {
   const { pending, run } = useRefreshFx();
   return (
-    <Button variant="outline" size="sm" disabled={pending} onClick={(e) => run(e.currentTarget)}>
+    <Button variant="outline" size="sm" disabled={pending} onClick={run}>
       <RefreshCw data-icon="inline-start" className={cn(pending && "animate-spin motion-reduce:animate-none")} />
       {/* Both labels share one grid cell so the button never changes width (no layout shift). */}
       <span className="grid">
@@ -20,33 +19,27 @@ export function RefreshButton() {
   );
 }
 
-const META: Record<Effect, { icon: typeof Radar; label: string }> = {
-  radar: { icon: Radar, label: "Radar" },
-  cascade: { icon: Layers, label: "Cascade" },
-  decrypt: { icon: Binary, label: "Decrypt" },
+const META: Record<Effect, { icon: typeof Layers; label: string; next: Effect }> = {
+  cascade: { icon: Layers, label: "Cascade", next: "decrypt" },
+  decrypt: { icon: Binary, label: "Decrypt", next: "cascade" },
 };
 
-/** Temporary: pick which refresh effect to try. Remove once one is chosen. */
-export function FxPicker() {
+/** Which refresh animation plays: one quiet icon that flips between the two. */
+export function FxToggle() {
   const fx = useEffectChoice();
+  const { icon: Icon, label, next } = META[fx];
+  const hint = `Animation: ${label}. Switch to ${META[next].label}`;
   return (
-    <ToggleGroup
-      type="single"
-      size="sm"
-      variant="outline"
-      value={fx}
-      onValueChange={(v) => v && setEffect(v as Effect)}
-      aria-label="Refresh animation"
+    // A preference, not a task: phones need the room for the status and Refresh.
+    <Button
+      variant="ghost"
+      size="icon-sm"
+      aria-label={hint}
+      title={hint}
+      onClick={() => setEffect(next)}
+      className="hidden text-muted-foreground sm:inline-flex"
     >
-      {EFFECTS.map((e) => {
-        const { icon: Icon, label } = META[e];
-        return (
-          <ToggleGroupItem key={e} value={e} aria-label={label} title={label} className="gap-1.5 px-2">
-            <Icon />
-            <span className="hidden sm:inline">{label}</span>
-          </ToggleGroupItem>
-        );
-      })}
-    </ToggleGroup>
+      <Icon />
+    </Button>
   );
 }

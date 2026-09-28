@@ -17,21 +17,22 @@ import { refreshAll } from "@/client/api";
 
 /*
  * Refresh animations. A refresh moves through phases:
- *   idle → pending (server action in flight; loops) → landing (fresh data committed; one-shot) → idle
+ *   idle → pending (request in flight; loops) → landing (fresh data committed; one-shot) → idle
  * The phase and chosen effect are exposed as data attributes on a wrapper so CSS in
- * globals.css can drive per-panel/per-row keyframes without making server rows client
- * components. Overlays and numbers use Motion. Everything is transform/opacity or an
- * overlay, so there's no layout shift, and it all switches off under reduced motion.
+ * globals.css can drive per-panel/per-row keyframes. Only panels whose content actually
+ * changed get the landing ([data-fx-changed]): light means news, so an unchanged board stays
+ * still. Everything is transform/opacity or an overlay, so there's no layout shift, and it all
+ * switches off under reduced motion.
  */
 
-export const EFFECTS = ["radar", "cascade", "decrypt"] as const;
+export const EFFECTS = ["cascade", "decrypt"] as const;
 export type Effect = (typeof EFFECTS)[number];
 type Phase = "idle" | "pending" | "landing";
 
 /** How long each one-shot landing runs, including its longest stagger delay. */
-const LANDING_MS: Record<Effect, number> = { radar: 1800, cascade: 1400, decrypt: 1400 };
+const LANDING_MS: Record<Effect, number> = { cascade: 1400, decrypt: 1400 };
 
-type Ctx = { fx: Effect | null; phase: Phase; landing: number; pending: boolean; run: (origin: HTMLElement) => void };
+type Ctx = { fx: Effect | null; phase: Phase; landing: number; pending: boolean; run: () => void };
 const FxContext = createContext<Ctx>({ fx: null, phase: "idle", landing: 0, pending: false, run: () => {} });
 export const useRefreshFx = () => use(FxContext);
 
@@ -43,9 +44,10 @@ const listeners = new Set<() => void>();
 function readEffect(): Effect {
   try {
     const v = localStorage.getItem(STORAGE_KEY);
-    return EFFECTS.includes(v as Effect) ? (v as Effect) : "radar";
+    // Anything else, including the retired "radar", falls back to the default.
+    return EFFECTS.includes(v as Effect) ? (v as Effect) : "cascade";
   } catch {
-    return "radar";
+    return "cascade";
   }
 }
 
@@ -62,7 +64,7 @@ export function useEffectChoice(): Effect {
   return useSyncExternalStore(
     (l) => (listeners.add(l), () => listeners.delete(l)),
     readEffect,
-    () => "radar",
+    () => "cascade",
   );
 }
 
@@ -79,6 +81,19 @@ function usePrefersReducedMotion(): boolean {
   );
 }
 
+// ---------- Change detection ----------
+
+/**
+ * What a panel shows, for telling whether a refresh changed it. Stat tiles declare theirs
+ * (`data-fx-sig`); panels use their rows and footer, which never hold animated text.
+ */
+function signature(el: HTMLElement): string {
+  return el.dataset.fxSig ?? [...el.querySelectorAll(":scope > ul, :scope > footer")].map((n) => n.textContent).join("\u0000");
+}
+
+const panelsIn = (root: HTMLElement | null) => [...(root?.querySelectorAll<HTMLElement>("[data-fx-panel]") ?? [])];
+const keyOf = (el: HTMLElement, i: number) => el.id || el.getAttribute("href") || `#${i}`;
+
 // ---------- Provider ----------
 
 export function RefreshFx({ children }: { children: ReactNode }) {
@@ -89,15 +104,15 @@ export function RefreshFx({ children }: { children: ReactNode }) {
   const [pending, start] = useTransition();
   const [landing, setLanding] = useState(0);
   const [settled, setSettled] = useState(0);
-  const [origin, setOrigin] = useState({ x: 0, y: 0 });
   const root = useRef<HTMLDivElement>(null);
+  const before = useRef(new Map<string, string>());
 
   const phase: Phase = pending ? "pending" : landing !== settled ? "landing" : "idle";
 
-  const run = (el: HTMLElement) => {
-    const r = el.getBoundingClientRect();
-    setOrigin({ x: r.left + r.width / 2, y: r.top + r.height / 2 });
-    root.current?.querySelectorAll<HTMLElement>("[data-fx-panel]").forEach((p, i) => p.style.setProperty("--fx-i", `${i}`));
+  const run = () => {
+    const panels = panelsIn(root.current);
+    before.current = new Map(panels.map((p, i) => [keyOf(p, i), signature(p)]));
+    panels.forEach((p, i) => p.style.setProperty("--fx-i", `${i}`));
     start(async () => {
       await refreshAll().catch(() => {}); // failures show in the panels; the animation still settles
       // Commits with the fresh data, so the landing starts exactly as it appears.
@@ -105,24 +120,24 @@ export function RefreshFx({ children }: { children: ReactNode }) {
     });
   };
 
-  // Stagger targets before the landing frame paints: delay depends on the effect's geometry.
+  // Before the landing frame paints: mark what changed, and stagger it by the effect's geometry.
   useLayoutEffect(() => {
-    if (!landing || !fx || !root.current) return;
-    const { x, y } = origin;
+    if (!landing || !root.current) return;
     const vh = window.innerHeight;
-    const maxDist = Math.hypot(window.innerWidth, vh);
-    root.current.querySelectorAll<HTMLElement>("[data-fx-panel]").forEach((el, i) => {
+    let n = 0;
+    panelsIn(root.current).forEach((el, i) => {
+      const changed = before.current.get(keyOf(el, i)) !== signature(el);
+      el.toggleAttribute("data-fx-changed", changed);
+      if (!changed || !fx) return;
       const r = el.getBoundingClientRect();
       const delay =
-        fx === "radar"
-          ? (Math.hypot(r.left + r.width / 2 - x, r.top + r.height / 2 - y) / maxDist) * 900 // wavefront arrival
-          : fx === "decrypt"
-            ? Math.min(Math.max(r.top / vh, 0), 1) * 550 // when the final scanline crosses it
-            : i * 35; // cascade: dealt in reading order
+        fx === "decrypt"
+          ? Math.min(Math.max(r.top / vh, 0), 1) * 550 // when the final scanline crosses it
+          : n++ * 35; // cascade: dealt in reading order
       el.style.setProperty("--fx-d", `${Math.round(delay)}ms`);
       el.querySelectorAll<HTMLElement>("li").forEach((li, j) => li.style.setProperty("--fx-r", `${Math.min(j, 10) * 28}ms`));
     });
-  }, [landing, fx, origin]);
+  }, [landing, fx]);
 
   useEffect(() => {
     if (!landing) return;
@@ -134,7 +149,6 @@ export function RefreshFx({ children }: { children: ReactNode }) {
     <FxContext value={{ fx, phase, landing, pending, run }}>
       <div ref={root} data-fx={fx ?? "none"} data-phase={phase}>
         {children}
-        {fx === "radar" && <RadarOverlay phase={phase} landing={landing} origin={origin} />}
         {fx === "decrypt" && <ScanlineOverlay phase={phase} landing={landing} />}
       </div>
     </FxContext>
@@ -144,46 +158,6 @@ export function RefreshFx({ children }: { children: ReactNode }) {
 // ---------- Overlays ----------
 
 const overlay = "pointer-events-none fixed inset-0 z-50 overflow-hidden";
-
-function RadarOverlay({ phase, landing, origin }: { phase: Phase; landing: number; origin: { x: number; y: number } }) {
-  // Only rendered client-side (overlays never show during SSR), so window is safe here.
-  const reach = typeof window === "undefined" ? 0 : Math.hypot(window.innerWidth, window.innerHeight) * 2.1;
-  return (
-    <div aria-hidden className={overlay}>
-      <AnimatePresence>
-        {phase === "pending" && (
-          <motion.div
-            key="sweep"
-            className="fx-radar-field"
-            // Scope centred on the page so the sweep crosses every panel; the landing wave comes from the button.
-            style={{ left: "50%", top: "55%" }}
-            initial={{ opacity: 0, scale: 0.6 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, transition: { duration: 0.35 } }}
-            transition={{ duration: 0.4, ease: "easeOut" }}
-          >
-            <div className="fx-radar-rings" />
-            <div className="fx-radar-beam" />
-          </motion.div>
-        )}
-      </AnimatePresence>
-      <AnimatePresence>
-        {phase === "landing" &&
-          [0, 0.12].map((delay, i) => (
-            <motion.div
-              key={`${landing}-${i}`}
-              className={i === 0 ? "fx-shockwave" : "fx-shockwave fx-shockwave-soft"}
-              style={{ left: origin.x, top: origin.y }}
-              initial={{ width: 0, height: 0, opacity: i === 0 ? 0.9 : 0.5 }}
-              animate={{ width: reach, height: reach, opacity: 0 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 1.1, delay, ease: [0.16, 0.84, 0.3, 1] }}
-            />
-          ))}
-      </AnimatePresence>
-    </div>
-  );
-}
 
 function ScanlineOverlay({ phase, landing }: { phase: Phase; landing: number }) {
   return (
@@ -273,47 +247,49 @@ export function FxText({ text, className }: { text: string; className?: string }
   );
 }
 
-/** A count that lands with the chosen effect: counts up (radar), rolls (cascade) or decodes (decrypt). */
+/**
+ * A count that lands with the chosen effect: rolls from its previous value (cascade) or
+ * decodes (decrypt). An unchanged count never moves, and never passes through zero on the
+ * way: a count that briefly reads 0 is a false all-clear.
+ */
 export function FxNumber({ value }: { value: number | string }) {
   const { fx, phase, landing } = useRefreshFx();
-  const ref = useRef<HTMLSpanElement>(null);
   const text = String(value);
-  const numeric = typeof value === "number";
-
-  useEffect(() => {
-    const el = ref.current;
-    if (!el || fx !== "radar" || phase !== "landing" || !numeric) return;
-    const controls = animate(0, value, {
-      delay: (panelDelay(el) + 100) / 1000,
-      duration: 0.7,
-      ease: [0.2, 0.8, 0.2, 1],
-      onUpdate: (v) => (el.textContent = String(Math.round(v))),
-      onComplete: () => (el.textContent = text),
-    });
-    return () => controls.stop();
-  }, [fx, phase, landing, value, numeric, text]);
+  // The value on screen before this refresh; follows live updates while idle.
+  const [prev, setPrev] = useState(text);
+  if (phase === "idle" && prev !== text) setPrev(text);
 
   if (fx === "decrypt") return <FxText text={text} />;
-  if (fx === "cascade" && phase === "landing" && numeric) return <Odometer key={landing} text={text} />;
-  return (
-    <span ref={ref} className="tabular-nums">
-      {text}
-    </span>
-  );
+  if (fx === "cascade" && phase === "landing" && prev !== text && /^\d+$/.test(text) && /^\d+$/.test(prev)) {
+    return <Odometer key={landing} from={prev} to={text} />;
+  }
+  return <span className="tabular-nums">{text}</span>;
 }
 
-function Odometer({ text }: { text: string }) {
+/** Each digit rolls forward from its old value to its new one; digits that didn't change stay put. */
+function Odometer({ from, to }: { from: string; to: string }) {
+  const old = from.padStart(to.length, "0").slice(-to.length);
+  const offset = (d: number) => `-${d * 5}%`;
   return (
-    <span className="inline-flex tabular-nums" aria-label={text}>
-      {[...text].map((d, i) => (
-        <span key={i} aria-hidden className="fx-odo-col">
-          <span className="fx-odo-reel" style={{ "--to": `-${(10 + Number(d)) * 5}%`, "--i": i } as CSSProperties}>
-            {Array.from({ length: 20 }, (_, n) => (
-              <span key={n}>{n % 10}</span>
-            ))}
+    <span className="inline-flex tabular-nums" aria-label={to}>
+      {[...to].map((d, i) => {
+        const a = Number(old[i]);
+        const b = Number(d);
+        // A 20-digit reel (0–9 twice), so every roll moves forward: from a in the first decade to b ahead of it.
+        const end = b > a ? b : b + 10;
+        return (
+          <span key={i} aria-hidden className="fx-odo-col">
+            <span
+              className="fx-odo-reel"
+              style={{ "--from": offset(a), "--to": offset(a === b ? a : end), "--i": i } as CSSProperties}
+            >
+              {Array.from({ length: 20 }, (_, n) => (
+                <span key={n}>{n % 10}</span>
+              ))}
+            </span>
           </span>
-        </span>
-      ))}
+        );
+      })}
     </span>
   );
 }
