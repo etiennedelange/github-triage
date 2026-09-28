@@ -9,7 +9,7 @@ import { defineConfig } from "vite-plus";
 export default defineConfig({
   root: fileURLToPath(new URL("../..", import.meta.url)),
   plugins: [
-    react(),
+    react({ compiler: true }),
     tailwindcss(),
     cloudflare({ configPath: "scripts/screenshots/wrangler.jsonc", persistState: { path: ".wrangler/screenshots" } }),
   ],
