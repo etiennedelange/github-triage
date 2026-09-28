@@ -190,9 +190,9 @@ export function LiveInbox({
 
 const TEXT: Record<Tone, string> = {
   danger: "text-destructive",
-  orange: "text-orange",
-  warning: "text-warning",
-  success: "text-success",
+  orange: "text-orange-text",
+  warning: "text-warning-text",
+  success: "text-success-text",
   info: "text-info",
   muted: "text-muted-foreground",
 };

@@ -220,7 +220,7 @@ function ShortcutsDialog({ ref, enabled }: { ref: React.Ref<HTMLDialogElement>; 
               </li>
             ))}
             <li className="flex items-start gap-2">
-              <span className="inline-flex h-5 w-14 shrink-0 items-center justify-center rounded-md bg-info/12 text-[11px] font-medium text-info">
+              <span className="inline-flex h-5 w-14 shrink-0 items-center justify-center rounded-md border border-info/45 text-[11px] font-medium text-info">
                 Glow
               </span>
               <span className="text-muted-foreground">A row that just changed on GitHub. Blue is only ever news.</span>
