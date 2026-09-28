@@ -144,3 +144,7 @@ Stack: Vite + React 19 SPA, Hono on Cloudflare Workers, a Durable Object as the 
 `GITHUB_API_URL` points the app at a different API root (GraphQL at `${GITHUB_API_URL}/graphql`), which is handy for testing against a mock server.
 
 Layout: `src/client/` is the browser entry (API client, URL state). `src/worker/index.ts` is the Worker. `src/edge/` is the Cloudflare side: auth, webhooks, the Hub Durable Object and the live protocol. `src/lib/github/` does the GitHub reads (inbox, security, HTTP). `src/lib/triage.ts` holds the pure rules and schemas. `src/components/triage/` is the UI.
+
+## License
+
+[FSL-1.1-MIT](LICENSE.md): use, change and self-host it for anything except offering it as a competing commercial product or service. Each version becomes MIT two years after it's released.
