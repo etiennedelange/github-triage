@@ -10,9 +10,6 @@
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-heading: var(--font-sans);
-  --color-orange-text: var(--orange-text);
-  --color-warning-text: var(--warning-text);
-  --color-success-text: var(--success-text);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -30,9 +27,6 @@
   --color-input: var(--input);
   --color-border: var(--border);
   --color-destructive: var(--destructive);
-  --color-success: var(--success);
-  --color-warning: var(--warning);
-  --color-orange: var(--orange);
   --color-info: var(--info);
   --color-accent-foreground: var(--accent-foreground);
   --color-accent: var(--accent);
@@ -95,23 +89,6 @@
   --sidebar-accent-foreground: var(--fg);
   --sidebar-border: var(--border);
   --sidebar-ring: var(--signal);
-}
-
-/* Status tokens proposed for the brand (see DESIGN.md) that brand.py css doesn't emit yet: an
-   orange at hue 62 for "waiting on you", between danger and warning, and text-safe variants of
-   success, warning and orange (4.5:1 on bg, elevated and highlight). */
-:root,
-[data-ground="snow-storm"] {
-  --orange: #c46016;
-  --orange-text: #9b4b11;
-  --warning-text: #755f11;
-  --success-text: #007131;
-}
-[data-ground="nord"] {
-  --orange: #fb9f41;
-  --orange-text: #fbab60;
-  --warning-text: var(--warning);
-  --success-text: #a9c492;
 }
 
 /* No lemon in this app: selection uses the ground's own selection tint. */
