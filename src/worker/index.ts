@@ -2,6 +2,9 @@
 // Hono. It never renders HTML; the React app is static files it serves behind the session.
 
 import { Hono } from "hono";
+import { csrf } from "hono/csrf";
+import { validator } from "hono/validator";
+import { z } from "zod";
 
 import { handleAuth, sessionLogin, unauthenticated } from "@/edge/auth";
 import { verifyWebhook } from "@/edge/crypto";
@@ -16,8 +19,20 @@ const hub = (env: EdgeEnv) => hubStub(env);
 /** Local development runs without a GitHub App: allowed only on this machine, never deployed. */
 const isLocalhost = (url: string) => ["localhost", "127.0.0.1", "[::1]"].includes(new URL(url).hostname);
 
+const repoName = z.string().regex(/^[\w.-]+\/[\w.-]+$/);
+const claudeRequest = z.object({ repo: repoName, number: z.number().int().positive(), body: z.string().trim().min(1).max(10_000) });
+
+/** Validates with zod; a bad request is a 400 with zod's message. */
+const parse = <S extends z.ZodType>(schema: S) => (value: unknown, c: { text: (t: string, s: 400) => Response }) => {
+  const r = schema.safeParse(value);
+  return r.success ? (r.data as z.output<S>) : c.text(z.prettifyError(r.error), 400);
+};
+
 // The typed API the browser calls (see src/client/api.ts): each route is one Hub call.
 const api = new Hono<AppEnv>()
+  // Only /api/claude writes to GitHub. SameSite=Lax covers signed-in mode; local mode has no
+  // session, so without this any page open in your browser could post a form here.
+  .use(csrf())
   .get("/session", (c) => c.json({ login: c.get("login"), oauth: Boolean(c.env.GITHUB_CLIENT_ID) }))
   .get("/inbox", async (c) => c.json(await hub(c.env).getInbox()))
   .get("/security", async (c) => c.json(await hub(c.env).getSecurity()))
@@ -25,6 +40,14 @@ const api = new Hono<AppEnv>()
   .post("/activity", async (c) => c.json(await hub(c.env).getActivity(true)))
   .get("/rate-limits", async (c) => c.json(await hub(c.env).getRateLimits()))
   .post("/refresh", async (c) => c.json(await hub(c.env).getInbox(true)))
+  .get("/claude", async (c) => c.json(await hub(c.env).getClaudeRuns()))
+  .get("/claude/setup", validator("query", parse(z.object({ repo: repoName }))), async (c) =>
+    c.json(await hub(c.env).claudeSetup(c.req.valid("query").repo)),
+  )
+  .post("/claude", validator("json", parse(claudeRequest)), async (c) => {
+    const { repo, number, body } = c.req.valid("json");
+    return c.json(await hub(c.env).requestClaude(repo, number, body));
+  })
   .get("/live", (c) => hub(c.env).fetch(c.req.raw));
 
 export type ApiType = typeof api;

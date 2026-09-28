@@ -172,6 +172,28 @@ describe("webhook → changes", () => {
     expect(changesFor("push", { ref: "refs/heads/feature", repository })).toEqual([]);
   });
 
+  it("turns the Claude Action's comment, branch and PR into run progress", () => {
+    const bot = { login: "claude[bot]", avatar_url: "a", html_url: "h" };
+    expect(changesFor("issue_comment", { action: "created", repository, issue: { number: 3 }, sender: bot })).toEqual([
+      { kind: "subject", key: "acme/api#3" },
+      { kind: "claude", signal: { kind: "working", repo: "acme/api", number: 3 } },
+    ]);
+    expect(changesFor("issue_comment", { action: "created", repository, issue: { number: 3 }, sender: { ...bot, login: "octocat" } })).toEqual([
+      { kind: "subject", key: "acme/api#3" },
+    ]);
+    const ref = "refs/heads/claude/issue-3-20260928-1200";
+    expect(changesFor("push", { ref, repository })).toEqual([
+      { kind: "claude", signal: { kind: "branch", repo: "acme/api", number: 3, branch: "claude/issue-3-20260928-1200" } },
+    ]);
+    expect(changesFor("push", { ref, deleted: true, repository })).toEqual([]);
+    const pull_request = { number: 8, html_url: "https://github.com/acme/api/pull/8", head: { ref: "claude/issue-3-20260928-1200" } };
+    expect(changesFor("pull_request", { action: "opened", repository, pull_request })).toEqual([
+      { kind: "subject", key: "acme/api#8" },
+      { kind: "claude", signal: { kind: "pr", repo: "acme/api", number: 3, url: pull_request.html_url } },
+    ]);
+    expect(changesFor("pull_request", { action: "synchronize", repository, pull_request })).toEqual([{ kind: "subject", key: "acme/api#8" }]);
+  });
+
   it("carries security alerts in the payload, so no API call is needed", () => {
     const alert = {
       number: 4,

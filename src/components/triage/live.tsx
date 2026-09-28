@@ -101,6 +101,8 @@ function receive(msg: ServerMessage) {
     update((s) => ({ ...s, alerts: new Map(s.alerts).set(msg.url, { at: msg.at, alert: null }) }));
   } else if (msg.type === "activity") {
     void queryClient.invalidateQueries({ queryKey: ["activity"] });
+  } else if (msg.type === "claude") {
+    void queryClient.invalidateQueries({ queryKey: ["claude"] });
   }
   if (gap) resync();
 }

@@ -30,6 +30,7 @@ import {
   type Severity,
 } from "@/lib/triage";
 import { AppLink } from "@/client/url";
+import { ClaudeAction } from "./claude";
 import { cn } from "@/lib/utils";
 
 export const TONE = {
@@ -224,6 +225,7 @@ export function IssueRow({ issue, live }: LiveProp & { issue: Issue }) {
       number={issue.number}
       live={live}
       meta={<CommonMeta item={issue} />}
+      trailing={<ClaudeAction issue={issue} />}
     />
   );
 }

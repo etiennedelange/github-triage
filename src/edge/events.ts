@@ -2,6 +2,7 @@
 
 import { z } from "zod";
 
+import { CLAUDE_BOT, claudeBranchIssue, type ClaudeSignal } from "@/lib/claude";
 import type { ActivityEvent } from "@/lib/github/activity";
 import {
   codeScanningAlert,
@@ -27,6 +28,8 @@ export type Change =
   | { kind: "repo-gone"; repo: string }
   /** Someone starred or unstarred one of your repos. */
   | { kind: "star"; starred: boolean; star: Extract<ActivityEvent, { kind: "star" }> }
+  /** Progress on a "Fix with Claude" run; ignored unless we started one for that issue. */
+  | { kind: "claude"; signal: ClaudeSignal }
   /** The installation's repo set changed: only a full refetch can tell what's visible now. */
   | { kind: "resync" };
 
@@ -35,8 +38,11 @@ const repoOf = (p: Payload) => p.repository?.full_name;
 const payload = z.looseObject({
   action: z.string().optional(),
   ref: z.string().optional(),
+  deleted: z.boolean().optional(),
   repository: z.looseObject({ full_name: z.string(), default_branch: z.string().optional() }).optional(),
-  pull_request: z.looseObject({ number: z.number() }).optional(),
+  pull_request: z
+    .looseObject({ number: z.number(), html_url: z.string().optional(), head: z.looseObject({ ref: z.string() }).optional() })
+    .optional(),
   issue: z.looseObject({ number: z.number() }).optional(),
   check_suite: z.looseObject({ pull_requests: z.array(z.looseObject({ number: z.number() })) }).optional(),
   alert: z.looseObject({ number: z.number(), html_url: z.string() }).optional(),
@@ -75,23 +81,38 @@ export function changesFor(event: string, raw: unknown): Change[] {
 
   switch (event) {
     case "pull_request":
-    case "pull_request_review":
-      return repo && p.pull_request ? [{ kind: "subject", key: subjectKey(repo, p.pull_request.number) }] : [];
+    case "pull_request_review": {
+      if (!repo || !p.pull_request) return [];
+      const out: Change[] = [{ kind: "subject", key: subjectKey(repo, p.pull_request.number) }];
+      const issue = event === "pull_request" && p.action === "opened" && claudeBranchIssue(p.pull_request.head?.ref ?? "");
+      if (issue && p.pull_request.html_url) out.push({ kind: "claude", signal: { kind: "pr", repo, number: issue, url: p.pull_request.html_url } });
+      return out;
+    }
 
     // issue_comment fires for PR conversation comments too; the number is shared.
     case "issues":
-    case "issue_comment":
-      return repo && p.issue ? [{ kind: "subject", key: subjectKey(repo, p.issue.number) }] : [];
+    case "issue_comment": {
+      if (!repo || !p.issue) return [];
+      const out: Change[] = [{ kind: "subject", key: subjectKey(repo, p.issue.number) }];
+      // The Action posts a tracking comment when it starts, then edits it as it goes.
+      if (event === "issue_comment" && p.sender?.login === CLAUDE_BOT && p.action !== "deleted") {
+        out.push({ kind: "claude", signal: { kind: "working", repo, number: p.issue.number } });
+      }
+      return out;
+    }
 
     // Only same-repo PRs are listed here; fork PRs pick up their checks on the next resync.
     case "check_suite":
       if (p.action !== "completed" || !repo || !p.check_suite) return [];
       return p.check_suite.pull_requests.map((pr) => ({ kind: "subject", key: subjectKey(repo, pr.number) }) as const);
 
-    case "push":
-      return repo && p.repository?.default_branch && p.ref === `refs/heads/${p.repository.default_branch}`
-        ? [{ kind: "repo-prs", repo }]
-        : [];
+    case "push": {
+      if (!repo) return [];
+      if (p.repository?.default_branch && p.ref === `refs/heads/${p.repository.default_branch}`) return [{ kind: "repo-prs", repo }];
+      const branch = p.ref?.replace(/^refs\/heads\//, "") ?? "";
+      const issue = !p.deleted && claudeBranchIssue(branch);
+      return issue ? [{ kind: "claude", signal: { kind: "branch", repo, number: issue, branch } }] : [];
+    }
 
     // Needs the App subscribed to Repository events. Scans skip archived repos too.
     case "repository":
