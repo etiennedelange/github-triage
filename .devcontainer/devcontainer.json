@@ -9,6 +9,12 @@
 
   "mounts": ["source=claude-code-config-${devcontainerId},target=/home/node/.claude,type=volume"],
 
+  "customizations": {
+    "vscode": {
+      "extensions": ["oxc.oxc-vscode"]
+    }
+  },
+
   "remoteUser": "node",
 
   "containerEnv": {
