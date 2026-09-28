@@ -13,5 +13,6 @@ export default defineConfig({
     tailwindcss(),
     cloudflare({ configPath: "scripts/screenshots/wrangler.jsonc", persistState: { path: ".wrangler/screenshots" } }),
   ],
+  define: { __BUILD_ID__: JSON.stringify("screenshots") },
   resolve: { alias: { "@": fileURLToPath(new URL("../../src", import.meta.url)) } },
 });
