@@ -50,7 +50,10 @@ function ContextLine({ inbox, repo, oauth }: { inbox: Inbox; repo?: string; oaut
         <span className="font-medium text-foreground">@{inbox.viewer.login}</span>
       </span>
       {repo && (
-        <AppLink href="/" className="inline-flex items-center gap-1 rounded-md bg-muted px-1.5 py-0.5 font-mono text-foreground hover:bg-muted/70">
+        <AppLink
+          href="/"
+          className="inline-flex items-center gap-1 rounded-md bg-muted px-1.5 py-0.5 font-mono text-foreground hover:bg-muted/70"
+        >
           {repo} <X aria-label="Clear filter" className="size-3" />
         </AppLink>
       )}
@@ -132,7 +135,9 @@ function SecurityPanel({ repo, oauth }: { repo?: string; oauth: boolean }) {
     forbidden: repos.filter((r) => r.scanners[s].status === "forbidden").length,
   }));
   const forbidden = coverage.some((c) => c.forbidden > 0);
-  const errored = repos.flatMap((r) => sources.filter((s) => r.scanners[s].status === "error").map((s) => `${r.repo} (${SOURCE[s].label})`));
+  const errored = repos.flatMap((r) =>
+    sources.filter((s) => r.scanners[s].status === "error").map((s) => `${r.repo} (${SOURCE[s].label})`),
+  );
 
   return (
     <LiveSecurityPanel
@@ -155,7 +160,8 @@ function SecurityPanel({ repo, oauth }: { repo?: string; oauth: boolean }) {
               <TriangleAlert aria-hidden className="mt-px size-3 shrink-0" />
               <span>
                 Some scanners returned 403, so their results are missing from this list. If you use a gh CLI token locally, run{" "}
-                <code className="font-mono">gh auth refresh -s security_events</code>. With a fine-grained token, grant read access to Dependabot alerts, code scanning alerts and secret scanning alerts.
+                <code className="font-mono">gh auth refresh -s security_events</code>. With a fine-grained token, grant read access to
+                Dependabot alerts, code scanning alerts and secret scanning alerts.
               </span>
             </p>
           )}
@@ -202,8 +208,9 @@ function ActivityPanel({ repo, oauth }: { repo?: string; oauth: boolean }) {
       footer={
         <div className="space-y-1">
           <p>
-            {plural(stars, "star", "stars")} · {plural(watchers, "watcher", "watchers")} across your repos · {plural(followers, "follower", "followers")}
-            {firstSeen && " · GitHub keeps no date for watches (or some follows): \"first seen\" is when this dashboard noticed them"}
+            {plural(stars, "star", "stars")} · {plural(watchers, "watcher", "watchers")} across your repos ·{" "}
+            {plural(followers, "follower", "followers")}
+            {firstSeen && ' · GitHub keeps no date for watches (or some follows): "first seen" is when this dashboard noticed them'}
           </p>
           {starsSince && (
             <p>
@@ -239,9 +246,14 @@ function ErrorCard({ error, compact, oauth }: { error: Failure; compact?: boolea
           <CircleHelp aria-hidden className="size-4 text-muted-foreground" />
           Sign in again
         </div>
-        <p className="mt-2 text-sm text-muted-foreground">Your GitHub session ended (tokens expire after six months unused, or were revoked).</p>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Your GitHub session ended (tokens expire after six months unused, or were revoked).
+        </p>
         {/* A plain link: /auth/* is handled by the Worker. */}
-        <a href="/auth/login" className="mt-3 inline-flex h-8 items-center rounded-md bg-foreground px-3 text-sm font-medium text-background hover:bg-foreground/90">
+        <a
+          href="/auth/login"
+          className="mt-3 inline-flex h-8 items-center rounded-md bg-foreground px-3 text-sm font-medium text-background hover:bg-foreground/90"
+        >
           Sign in with GitHub
         </a>
       </div>
@@ -257,9 +269,11 @@ function ErrorCard({ error, compact, oauth }: { error: Failure; compact?: boolea
         <div className="mt-2 space-y-2 text-sm text-muted-foreground">
           <p>
             Local development reads GitHub with your own token, server-side only. Put it in{" "}
-            <code className="font-mono text-foreground">.dev.vars</code> as <code className="font-mono text-foreground">GITHUB_TOKEN=…</code> (for
-            example <code className="font-mono text-foreground">gh auth token</code>, with <code className="font-mono text-foreground">security_events</code> for
-            security alerts) and restart <code className="font-mono text-foreground">pnpm dev</code>.
+            <code className="font-mono text-foreground">.dev.vars</code> as{" "}
+            <code className="font-mono text-foreground">GITHUB_TOKEN=…</code> (for example{" "}
+            <code className="font-mono text-foreground">gh auth token</code>, with{" "}
+            <code className="font-mono text-foreground">security_events</code> for security alerts) and restart{" "}
+            <code className="font-mono text-foreground">pnpm dev</code>.
           </p>
         </div>
       ) : (

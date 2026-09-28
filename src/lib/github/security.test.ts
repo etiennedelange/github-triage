@@ -39,13 +39,17 @@ describe("scanOne", () => {
   });
 
   it("treats a 403 as a missing scope, distinct from other failures", async () => {
-    globalThis.fetch = vi.fn(async () => new Response(JSON.stringify({ message: "Resource not accessible" }), { status: 403 })) as unknown as typeof fetch;
+    globalThis.fetch = vi.fn(
+      async () => new Response(JSON.stringify({ message: "Resource not accessible" }), { status: 403 }),
+    ) as unknown as typeof fetch;
     const res = await scanOne(auth, "acme/api", "secret-scanning");
     expect(res.status).toBe("forbidden");
   });
 
   it("surfaces other statuses as a plain error", async () => {
-    globalThis.fetch = vi.fn(async () => new Response(JSON.stringify({ message: "Server error" }), { status: 500 })) as unknown as typeof fetch;
+    globalThis.fetch = vi.fn(
+      async () => new Response(JSON.stringify({ message: "Server error" }), { status: 500 }),
+    ) as unknown as typeof fetch;
     const res = await scanOne(auth, "acme/api", "dependabot");
     expect(res.status).toBe("error");
   });
@@ -64,7 +68,11 @@ describe("listInstalledRepos", () => {
       "/user/installations?per_page=100": { installations: [{ id: 1 }] },
       "/user/installations/1/repositories?per_page=100&page=1": {
         total_count: 3,
-        repositories: [repo("acme/old", "2026-01-01T00:00:00Z"), repo("acme/fork", "2026-06-01T00:00:00Z", { fork: true }), repo("acme/new", "2026-09-01T00:00:00Z")],
+        repositories: [
+          repo("acme/old", "2026-01-01T00:00:00Z"),
+          repo("acme/fork", "2026-06-01T00:00:00Z", { fork: true }),
+          repo("acme/new", "2026-09-01T00:00:00Z"),
+        ],
       },
     });
     const repos = await listInstalledRepos({ token: "t" }, 1);

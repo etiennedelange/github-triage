@@ -70,8 +70,7 @@ export function LiveInbox({
 
   const actionable = mine.items.filter((pr) => ["fix-checks", "resolve-conflicts", "address-review"].includes(prNextStep(pr))).length;
   const mergeable = mine.items.filter((pr) => prNextStep(pr) === "merge").length;
-  const searchUrl = (kind: "pulls" | "issues", s: InboxSection) =>
-    `https://github.com/${kind}?q=${encodeURIComponent(inbox.queries[s])}`;
+  const searchUrl = (kind: "pulls" | "issues", s: InboxSection) => `https://github.com/${kind}?q=${encodeURIComponent(inbox.queries[s])}`;
   const more = (kind: "pulls" | "issues", s: InboxSection, v: { fetched: number; total: number }) =>
     // null, not an element that renders nothing: the Panel draws its footer strip for any truthy value.
     repo || v.total <= v.fetched ? null : <MoreOnGitHub shown={v.fetched} total={v.total} href={searchUrl(kind, s)} />;
@@ -100,21 +99,83 @@ export function LiveInbox({
 
       {/* items-start: a short panel stays short instead of stretching to its neighbour's height. */}
       <div id="panels" tabIndex={-1} className="grid scroll-mt-4 items-start gap-3 outline-none lg:grid-cols-2">
-        <Panel id="review" icon={Eye} title="Needs your review" count={review.items.length} empty="No reviews waiting on you." footer={more("pulls", "review", review)}>
-          {review.items.map((pr) => <PrRow key={rowKey(pr.url, review.live, returned)} live={review.live.has(pr.url) || returned.has(pr.url)} pr={pr} perspective="reviewer" />)}
+        <Panel
+          id="review"
+          icon={Eye}
+          title="Needs your review"
+          count={review.items.length}
+          empty="No reviews waiting on you."
+          footer={more("pulls", "review", review)}
+        >
+          {review.items.map((pr) => (
+            <PrRow
+              key={rowKey(pr.url, review.live, returned)}
+              live={review.live.has(pr.url) || returned.has(pr.url)}
+              pr={pr}
+              perspective="reviewer"
+            />
+          ))}
         </Panel>
-        <Panel id="mine" icon={GitPullRequest} title="Your pull requests" count={mine.items.length} empty="No open pull requests." footer={more("pulls", "mine", mine)}>
-          {mineSorted.map((pr) => <PrRow key={rowKey(pr.url, mine.live, returned)} live={mine.live.has(pr.url) || returned.has(pr.url)} pr={pr} perspective="author" />)}
+        <Panel
+          id="mine"
+          icon={GitPullRequest}
+          title="Your pull requests"
+          count={mine.items.length}
+          empty="No open pull requests."
+          footer={more("pulls", "mine", mine)}
+        >
+          {mineSorted.map((pr) => (
+            <PrRow
+              key={rowKey(pr.url, mine.live, returned)}
+              live={mine.live.has(pr.url) || returned.has(pr.url)}
+              pr={pr}
+              perspective="author"
+            />
+          ))}
         </Panel>
         {securityPanel}
-        <Panel id="assigned" icon={CircleDot} title="Assigned to you" count={assigned.items.length} empty="No issues assigned to you." footer={more("issues", "assigned", assigned)}>
-          {assigned.items.map((i) => <IssueRow key={rowKey(i.url, assigned.live, returned)} live={assigned.live.has(i.url) || returned.has(i.url)} issue={i} />)}
+        <Panel
+          id="assigned"
+          icon={CircleDot}
+          title="Assigned to you"
+          count={assigned.items.length}
+          empty="No issues assigned to you."
+          footer={more("issues", "assigned", assigned)}
+        >
+          {assigned.items.map((i) => (
+            <IssueRow key={rowKey(i.url, assigned.live, returned)} live={assigned.live.has(i.url) || returned.has(i.url)} issue={i} />
+          ))}
         </Panel>
-        <Panel quiet id="incoming" icon={GitPullRequestArrow} title="Incoming pull requests" count={incoming.items.length} empty="No one else has PRs open on your repos." footer={more("pulls", "incoming", incoming)}>
-          {incoming.items.map((pr) => <PrRow key={rowKey(pr.url, incoming.live, returned)} live={incoming.live.has(pr.url) || returned.has(pr.url)} pr={pr} perspective="reviewer" />)}
+        <Panel
+          quiet
+          id="incoming"
+          icon={GitPullRequestArrow}
+          title="Incoming pull requests"
+          count={incoming.items.length}
+          empty="No one else has PRs open on your repos."
+          footer={more("pulls", "incoming", incoming)}
+        >
+          {incoming.items.map((pr) => (
+            <PrRow
+              key={rowKey(pr.url, incoming.live, returned)}
+              live={incoming.live.has(pr.url) || returned.has(pr.url)}
+              pr={pr}
+              perspective="reviewer"
+            />
+          ))}
         </Panel>
-        <Panel quiet id="untriaged" icon={InboxIcon} title="Untriaged issues" count={untriaged.items.length} empty="Every issue on your repos has an owner." footer={more("issues", "untriaged", untriaged)}>
-          {untriaged.items.map((i) => <IssueRow key={rowKey(i.url, untriaged.live, returned)} live={untriaged.live.has(i.url) || returned.has(i.url)} issue={i} />)}
+        <Panel
+          quiet
+          id="untriaged"
+          icon={InboxIcon}
+          title="Untriaged issues"
+          count={untriaged.items.length}
+          empty="Every issue on your repos has an owner."
+          footer={more("issues", "untriaged", untriaged)}
+        >
+          {untriaged.items.map((i) => (
+            <IssueRow key={rowKey(i.url, untriaged.live, returned)} live={untriaged.live.has(i.url) || returned.has(i.url)} issue={i} />
+          ))}
         </Panel>
         {activityPanel}
       </div>
@@ -122,9 +183,26 @@ export function LiveInbox({
   );
 }
 
-export function Stat({ href, label, value, sub, tone }: { href: string; label: string; value: number | string; sub?: string; tone?: Tone }) {
+export function Stat({
+  href,
+  label,
+  value,
+  sub,
+  tone,
+}: {
+  href: string;
+  label: string;
+  value: number | string;
+  sub?: string;
+  tone?: Tone;
+}) {
   return (
-    <a href={href} data-fx-panel data-fx-sig={`${value}|${sub ?? ""}`} className="group flex min-w-0 items-baseline gap-2 rounded-xl border bg-card px-3 py-2 transition-colors hover:bg-muted/50">
+    <a
+      href={href}
+      data-fx-panel
+      data-fx-sig={`${value}|${sub ?? ""}`}
+      className="group flex min-w-0 items-baseline gap-2 rounded-xl border bg-card px-3 py-2 transition-colors hover:bg-muted/50"
+    >
       <span className={cn("rounded-md px-1.5 font-mono text-lg font-semibold tabular-nums", tone ? TONE[tone] : "text-foreground")}>
         <FxNumber value={value} />
       </span>
@@ -144,7 +222,11 @@ function RepoChips({ lists, active }: { lists: { repo: string }[][]; active?: st
   const chip = "inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs transition-colors hover:bg-muted";
   return (
     <nav aria-label="Filter by repository" className="-mx-4 flex gap-1.5 overflow-x-auto px-4 pb-1 sm:mx-0 sm:flex-wrap sm:px-0">
-      <AppLink href="/" aria-current={!active ? "page" : undefined} className={cn(chip, !active && "border-foreground bg-foreground text-background hover:bg-foreground/90")}>
+      <AppLink
+        href="/"
+        aria-current={!active ? "page" : undefined}
+        className={cn(chip, !active && "border-foreground bg-foreground text-background hover:bg-foreground/90")}
+      >
         All
       </AppLink>
       {repos.map(([repo, n]) => (
@@ -186,7 +268,17 @@ export function LiveSecurityStat({ report, repo }: { report: SecurityReport; rep
 }
 
 /** The alert list is live; the coverage footer describes the last full scan, so the server renders it. */
-export function LiveSecurityPanel({ report, repo, empty, footer }: { report: SecurityReport; repo?: string; empty: string; footer: ReactNode }) {
+export function LiveSecurityPanel({
+  report,
+  repo,
+  empty,
+  footer,
+}: {
+  report: SecurityReport;
+  repo?: string;
+  empty: string;
+  footer: ReactNode;
+}) {
   const { alerts, live, returned } = useLiveAlerts(report, repo);
   const counts = countBySeverity(alerts);
   return (

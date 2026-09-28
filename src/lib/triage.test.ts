@@ -18,19 +18,21 @@ import {
   type SecurityAlert,
 } from "./triage";
 
-function pr(overrides: Partial<{
-  isDraft: boolean;
-  reviewDecision: "APPROVED" | "CHANGES_REQUESTED" | "REVIEW_REQUIRED" | null;
-  mergeable: "MERGEABLE" | "CONFLICTING" | "UNKNOWN";
-  checks: "SUCCESS" | "FAILURE" | "ERROR" | "PENDING" | "EXPECTED" | null;
-  updatedAt: string;
-  number: number;
-  author: string;
-  repo: string;
-  state: "OPEN" | "CLOSED" | "MERGED";
-  archived: boolean;
-  reviewers: ({ login: string } | { slug: string; organization: { login: string } } | null)[];
-}> = {}): PullRequest {
+function pr(
+  overrides: Partial<{
+    isDraft: boolean;
+    reviewDecision: "APPROVED" | "CHANGES_REQUESTED" | "REVIEW_REQUIRED" | null;
+    mergeable: "MERGEABLE" | "CONFLICTING" | "UNKNOWN";
+    checks: "SUCCESS" | "FAILURE" | "ERROR" | "PENDING" | "EXPECTED" | null;
+    updatedAt: string;
+    number: number;
+    author: string;
+    repo: string;
+    state: "OPEN" | "CLOSED" | "MERGED";
+    archived: boolean;
+    reviewers: ({ login: string } | { slug: string; organization: { login: string } } | null)[];
+  }> = {},
+): PullRequest {
   return pullRequestNode.parse({
     __typename: "PullRequest",
     number: overrides.number ?? 1,
@@ -93,7 +95,9 @@ describe("sectionsFor", () => {
     expect(sectionsFor(pr({ author: "me", repo: "elsewhere/lib" }), ctx)).toEqual(["mine"]);
     // review-requested:@me, directly or through a team, on any repo
     expect(sectionsFor(pr({ author: "bob", repo: "elsewhere/lib", reviewers: [{ login: "ME" }] }), ctx)).toEqual(["review"]);
-    expect(sectionsFor(pr({ author: "bob", repo: "elsewhere/lib", reviewers: [{ slug: "web", organization: { login: "acme" } }] }), ctx)).toEqual(["review"]);
+    expect(
+      sectionsFor(pr({ author: "bob", repo: "elsewhere/lib", reviewers: [{ slug: "web", organization: { login: "acme" } }] }), ctx),
+    ).toEqual(["review"]);
     // user:<owners> -author:@me, minus anything already in review
     expect(sectionsFor(pr({ author: "bob", repo: "acme/api" }), ctx)).toEqual(["incoming"]);
     expect(sectionsFor(pr({ author: "bob", repo: "acme/api", reviewers: [{ login: "me" }] }), ctx)).toEqual(["review"]);
@@ -159,21 +163,33 @@ describe("security alert parsing", () => {
 
   it("prefers code scanning's security severity, falling back to rule severity", () => {
     const base = { number: 1, html_url: "u", created_at: "2026-09-01T00:00:00Z", tool: { name: "CodeQL" } };
-    expect(codeScanningAlert.parse({ ...base, rule: { id: "x", severity: "warning", security_severity_level: "high" } }).severity).toBe("high");
+    expect(codeScanningAlert.parse({ ...base, rule: { id: "x", severity: "warning", security_severity_level: "high" } }).severity).toBe(
+      "high",
+    );
     expect(codeScanningAlert.parse({ ...base, rule: { id: "x", severity: "error", security_severity_level: null } }).severity).toBe("high");
     expect(codeScanningAlert.parse({ ...base, rule: { id: "x", severity: "note" } }).severity).toBe("low");
     expect(codeScanningAlert.parse({ ...base, rule: { id: "x", severity: "something-new" } }).severity).toBe("unknown");
   });
 
   it("treats exposed secrets as critical", () => {
-    const a = secretScanningAlert.parse({ number: 1, html_url: "u", created_at: "2026-09-01T00:00:00Z", secret_type_display_name: "GitHub PAT" });
+    const a = secretScanningAlert.parse({
+      number: 1,
+      html_url: "u",
+      created_at: "2026-09-01T00:00:00Z",
+      secret_type_display_name: "GitHub PAT",
+    });
     expect(a).toMatchObject({ severity: "critical", title: "Exposed GitHub PAT" });
   });
 
   it("sorts by severity then newest, and counts per severity", () => {
     const mk = (severity: SecurityAlert["severity"], createdAt: string, number: number) =>
       ({ source: "dependabot", number, url: `${number}`, createdAt, severity, title: "", detail: "", repo: "o/r" }) as SecurityAlert;
-    const alerts = [mk("low", "2026-09-05", 1), mk("critical", "2026-09-01", 2), mk("critical", "2026-09-03", 3), mk("unknown", "2026-09-09", 4)];
+    const alerts = [
+      mk("low", "2026-09-05", 1),
+      mk("critical", "2026-09-01", 2),
+      mk("critical", "2026-09-03", 3),
+      mk("unknown", "2026-09-09", 4),
+    ];
     expect(sortAlerts(alerts).map((a) => a.number)).toEqual([3, 2, 1, 4]);
     expect(countBySeverity(alerts)).toEqual({ critical: 2, high: 0, medium: 0, low: 1, unknown: 1 });
   });

@@ -26,7 +26,8 @@ async function json<T>(res: ClientResponse<T>): Promise<T> {
   return res.json() as Promise<T>;
 }
 
-export const useSession = () => useQuery({ queryKey: ["session"], queryFn: async () => json(await api.session.$get()), staleTime: Infinity });
+export const useSession = () =>
+  useQuery({ queryKey: ["session"], queryFn: async () => json(await api.session.$get()), staleTime: Infinity });
 
 export const useInbox = () => useQuery({ queryKey: ["inbox"], queryFn: async () => json(await api.inbox.$get()) });
 

@@ -63,12 +63,18 @@ export async function fetchOpenPrs(auth: GitHubAuth, repo: string): Promise<Pull
   const [owner, name] = repo.split("/");
   const data = await graphql<{ repository: { pullRequests: { nodes: unknown[] } } | null }>(
     auth,
-    `query ($o: String!, $r: String!) {
-      repository(owner: $o, name: $r) {
-        pullRequests(states: OPEN, first: 50, orderBy: { field: UPDATED_AT, direction: DESC }) { nodes { ...PR } }
+    `
+      query ($o: String!, $r: String!) {
+        repository(owner: $o, name: $r) {
+          pullRequests(states: OPEN, first: 50, orderBy: { field: UPDATED_AT, direction: DESC }) {
+            nodes {
+              ...PR
+            }
+          }
+        }
       }
-    }
-    ${ITEM_FRAGMENTS}`,
+      ${ITEM_FRAGMENTS}
+    `,
     { o: owner, r: name },
   );
   return z.array(pullRequestNode).parse(data.repository?.pullRequests.nodes ?? []);
@@ -82,13 +88,31 @@ export async function fetchRecentlyUpdated(auth: GitHubAuth, since: string): Pro
   const window = `archived:false updated:>=${since}`;
   const data = await graphql<Record<"requested" | "reviewed" | "mine" | "assigned", { nodes: unknown[] }>>(
     auth,
-    `query ($requested: String!, $reviewed: String!, $mine: String!, $assigned: String!) {
-      requested: search(query: $requested, type: ISSUE, first: 30) { nodes { ...PR } }
-      reviewed: search(query: $reviewed, type: ISSUE, first: 30) { nodes { ...PR } }
-      mine: search(query: $mine, type: ISSUE, first: 30) { nodes { ...PR } }
-      assigned: search(query: $assigned, type: ISSUE, first: 30) { nodes { ...Issue } }
-    }
-    ${ITEM_FRAGMENTS}`,
+    `
+      query ($requested: String!, $reviewed: String!, $mine: String!, $assigned: String!) {
+        requested: search(query: $requested, type: ISSUE, first: 30) {
+          nodes {
+            ...PR
+          }
+        }
+        reviewed: search(query: $reviewed, type: ISSUE, first: 30) {
+          nodes {
+            ...PR
+          }
+        }
+        mine: search(query: $mine, type: ISSUE, first: 30) {
+          nodes {
+            ...PR
+          }
+        }
+        assigned: search(query: $assigned, type: ISSUE, first: 30) {
+          nodes {
+            ...Issue
+          }
+        }
+      }
+      ${ITEM_FRAGMENTS}
+    `,
     {
       requested: `is:pr review-requested:@me ${window}`,
       // A review request disappears once you review; this catches that exit.
@@ -107,9 +131,22 @@ export async function fetchRecentlyUpdated(auth: GitHubAuth, since: string): Pro
 export async function fetchTeams(auth: GitHubAuth, login: string): Promise<string[]> {
   const data = await graphql<{ viewer: { organizations: { nodes: { login: string; teams: { nodes: { slug: string }[] } }[] } } }>(
     auth,
-    `query ($login: [String!]) {
-      viewer { organizations(first: 50) { nodes { login teams(first: 100, userLogins: $login) { nodes { slug } } } } }
-    }`,
+    `
+      query ($login: [String!]) {
+        viewer {
+          organizations(first: 50) {
+            nodes {
+              login
+              teams(first: 100, userLogins: $login) {
+                nodes {
+                  slug
+                }
+              }
+            }
+          }
+        }
+      }
+    `,
     { login: [login] },
     { partial: true },
   );

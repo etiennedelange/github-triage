@@ -12,14 +12,14 @@ One pane for everything on GitHub that's waiting on you: pull requests, issues a
 
 ![The same dashboard in dark mode](docs/screenshots/dashboard-dark.png)
 
-| Panel | What's in it |
-| --- | --- |
-| **Needs your review** | Open PRs where your review is requested |
-| **Your pull requests** | Your open PRs, sorted by next step: fix checks → resolve conflicts → address review → ready to merge → awaiting review → draft |
-| **Incoming pull requests** | PRs from others (including Dependabot) on your repos |
-| **Security alerts** | Open Dependabot, code scanning and secret scanning alerts across your repos, by severity |
-| **Assigned to you** | Open issues assigned to you |
-| **Untriaged issues** | Open issues on your repos with no assignee |
+| Panel                      | What's in it                                                                                                                   |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| **Needs your review**      | Open PRs where your review is requested                                                                                        |
+| **Your pull requests**     | Your open PRs, sorted by next step: fix checks → resolve conflicts → address review → ready to merge → awaiting review → draft |
+| **Incoming pull requests** | PRs from others (including Dependabot) on your repos                                                                           |
+| **Security alerts**        | Open Dependabot, code scanning and secret scanning alerts across your repos, by severity                                       |
+| **Assigned to you**        | Open issues assigned to you                                                                                                    |
+| **Untriaged issues**       | Open issues on your repos with no assignee                                                                                     |
 
 Click any repo name (or a chip) to filter everything to that repo; the filter lives in the URL (`?repo=owner/name`). Items untouched for 14+ days are marked stale.
 
@@ -49,7 +49,7 @@ The **Stars & followers** panel lists the latest stars and new watchers on repos
 
 Issue rows in **Assigned to you** and **Untriaged issues** have a ✦ button. It opens a comment starting with `@claude` that you can edit, and posts it on the issue. The [Claude GitHub Action](https://github.com/anthropics/claude-code-action) then picks it up and works on a fix. When the popover opens, the Hub checks that repo's `.github/workflows` for the Action. If it's missing, the popover says so and won't post, because nothing would answer. Set the Action up by running `/install-github-app` in Claude Code in that repo.
 
-After you post, the row shows how far the run has got: *Asked Claude*, then *Claude working* when `claude[bot]` comments, then *Branch ready* when it pushes `claude/issue-<n>-…`, which links to the compare view to open the PR. If a PR is opened from that branch, the row shows *PR opened*. Progress arrives through the Issue comment, Push and Pull request webhooks. While Claude is still picking the run up or working, the tab also polls every 30 seconds. On those reads the Hub checks GitHub directly for Claude's comment, the branch and a PR from it, so runs advance in local mode (no webhooks) and after a missed delivery. It stops checking once a run reaches a PR or is a day old.
+After you post, the row shows how far the run has got: _Asked Claude_, then _Claude working_ when `claude[bot]` comments, then _Branch ready_ when it pushes `claude/issue-<n>-…`, which links to the compare view to open the PR. If a PR is opened from that branch, the row shows _PR opened_. Progress arrives through the Issue comment, Push and Pull request webhooks. While Claude is still picking the run up or working, the tab also polls every 30 seconds. On those reads the Hub checks GitHub directly for Claude's comment, the branch and a PR from it, so runs advance in local mode (no webhooks) and after a missed delivery. It stops checking once a run reaches a PR or is a day old.
 
 This is the only write, so it needs write access to issues: **Issues: Read and write** on the GitHub App, or a token that can comment in local mode. Without it, GitHub's 403 is shown in the popover.
 
@@ -65,13 +65,13 @@ Deployed, the app is one Cloudflare Worker. You sign in with GitHub, and changes
 
 The browser app is a static Vite + React SPA. The Worker (`src/worker/index.ts`, Hono) never renders HTML; it handles:
 
-| Path | What it does |
-| --- | --- |
-| `/auth/login`, `/auth/callback`, `/auth/logout` | GitHub App OAuth. Only logins in `ALLOWED_LOGINS` get a session (a signed, HttpOnly cookie). Tokens never reach the browser. |
-| `/api/github/webhook` | GitHub App webhooks, verified with `X-Hub-Signature-256`. The only path that doesn't need a session. |
-| `/api/inbox`, `/api/security`, `/api/rate-limits`, `/api/refresh`, `/api/session` | JSON for the app, each a single call to the Hub. Typed end to end with Hono RPC (`src/client/api.ts`). |
-| `/api/live` | The dashboard's WebSocket. |
-| everything else | The SPA's static files, behind the session check. |
+| Path                                                                              | What it does                                                                                                                 |
+| --------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `/auth/login`, `/auth/callback`, `/auth/logout`                                   | GitHub App OAuth. Only logins in `ALLOWED_LOGINS` get a session (a signed, HttpOnly cookie). Tokens never reach the browser. |
+| `/api/github/webhook`                                                             | GitHub App webhooks, verified with `X-Hub-Signature-256`. The only path that doesn't need a session.                         |
+| `/api/inbox`, `/api/security`, `/api/rate-limits`, `/api/refresh`, `/api/session` | JSON for the app, each a single call to the Hub. Typed end to end with Hono RPC (`src/client/api.ts`).                       |
+| `/api/live`                                                                       | The dashboard's WebSocket.                                                                                                   |
+| everything else                                                                   | The SPA's static files, behind the session check.                                                                            |
 
 The **Hub** Durable Object (`src/edge/hub.ts`) holds your OAuth tokens and refreshes them. Refresh tokens are single-use, so there's exactly one place that refreshes. It also holds the open tabs' WebSockets, which hibernate so idle tabs cost nothing, and it turns changes into small updates:
 
@@ -111,11 +111,11 @@ A scan is 3 GitHub calls per repo, which can be well over Cloudflare Workers' pe
 
 ### Realtime coverage
 
-| Where | How it updates |
-| --- | --- |
-| Repos with the App installed | Webhooks, typically within about 2s |
-| Other repos (e.g. a review request on a public repo) | A search for PRs and issues involving you that changed since the last check, every 2 minutes and only while a tab is open |
-| Checks on PRs from forks, commit statuses (the older API that some CI services still use) | On the next Refresh or resync |
+| Where                                                                                     | How it updates                                                                                                            |
+| ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| Repos with the App installed                                                              | Webhooks, typically within about 2s                                                                                       |
+| Other repos (e.g. a review request on a public repo)                                      | A search for PRs and issues involving you that changed since the last check, every 2 minutes and only while a tab is open |
+| Checks on PRs from forks, commit statuses (the older API that some CI services still use) | On the next Refresh or resync                                                                                             |
 
 ## Development
 

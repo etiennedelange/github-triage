@@ -23,10 +23,12 @@ const repoName = z.string().regex(/^[\w.-]+\/[\w.-]+$/);
 const claudeRequest = z.object({ repo: repoName, number: z.number().int().positive(), body: z.string().trim().min(1).max(10_000) });
 
 /** Validates with zod; a bad request is a 400 with zod's message. */
-const parse = <S extends z.ZodType>(schema: S) => (value: unknown, c: { text: (t: string, s: 400) => Response }) => {
-  const r = schema.safeParse(value);
-  return r.success ? (r.data as z.output<S>) : c.text(z.prettifyError(r.error), 400);
-};
+const parse =
+  <S extends z.ZodType>(schema: S) =>
+  (value: unknown, c: { text: (t: string, s: 400) => Response }) => {
+    const r = schema.safeParse(value);
+    return r.success ? (r.data as z.output<S>) : c.text(z.prettifyError(r.error), 400);
+  };
 
 // The typed API the browser calls (see src/client/api.ts): each route is one Hub call.
 const api = new Hono<AppEnv>()
@@ -61,7 +63,9 @@ app.post("/api/github/webhook", async (c) => {
     return c.text("Bad signature", 401);
   }
   // Ack immediately; GitHub times out deliveries after 10s.
-  c.executionCtx.waitUntil(hub(c.env).webhook(c.req.header("X-GitHub-Delivery") ?? "", c.req.header("X-GitHub-Event") ?? "", JSON.parse(body)));
+  c.executionCtx.waitUntil(
+    hub(c.env).webhook(c.req.header("X-GitHub-Delivery") ?? "", c.req.header("X-GitHub-Event") ?? "", JSON.parse(body)),
+  );
   return c.body(null, 202);
 });
 

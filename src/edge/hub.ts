@@ -170,9 +170,19 @@ export class Hub extends DurableObject<EdgeEnv> {
       const prev = await this.ctx.storage.get<{ seen: Seen }>("followers");
       const prevWatchers = await this.ctx.storage.get<{ seen: Seen }>("watchers");
       const followers =
-        !snap.complete.followers && prev ? prev : { seen: diffSeen(prev?.seen, snap.followers.map((f) => f.login), fetchedAt) };
+        !snap.complete.followers && prev
+          ? prev
+          : {
+              seen: diffSeen(
+                prev?.seen,
+                snap.followers.map((f) => f.login),
+                fetchedAt,
+              ),
+            };
       const watchers =
-        !snap.complete.watchers && prevWatchers ? prevWatchers : { seen: diffSeen(prevWatchers?.seen, snap.watchers.map(watcherKey), fetchedAt) };
+        !snap.complete.watchers && prevWatchers
+          ? prevWatchers
+          : { seen: diffSeen(prevWatchers?.seen, snap.watchers.map(watcherKey), fetchedAt) };
       const activity = toActivity(snap, { followers: followers.seen, watchers: watchers.seen }, await this.starLog(), fetchedAt);
       await this.ctx.storage.put({ followers, watchers, activity });
       return activity;
@@ -198,7 +208,9 @@ export class Hub extends DurableObject<EdgeEnv> {
     return asResult(async () => {
       const stored = pruneRuns((await this.ctx.storage.get<ClaudeRuns>("claudeRuns")) ?? {});
       const now = Date.now();
-      const due = Object.values(stored).filter((r) => isActiveRun(r, now) && now - Date.parse(r.checkedAt ?? r.requestedAt) >= CLAUDE_CHECK_MS);
+      const due = Object.values(stored).filter(
+        (r) => isActiveRun(r, now) && now - Date.parse(r.checkedAt ?? r.requestedAt) >= CLAUDE_CHECK_MS,
+      );
       if (!due.length) return stored;
       // A failed check (rate limit, access lost) just leaves the run where it was until next time.
       const found = await mapLimit(due, 3, (run) => this.withAuth((auth) => fetchRunProgress(auth, run)).catch(() => []));
@@ -268,7 +280,14 @@ export class Hub extends DurableObject<EdgeEnv> {
       () => [] as string[],
     );
     if (!repos.length) return;
-    const job: SecurityJob = { repos, sources: Object.keys(SCANNERS) as AlertSource[], index: 0, alerts: [], repoScanners: {}, truncated: [] };
+    const job: SecurityJob = {
+      repos,
+      sources: Object.keys(SCANNERS) as AlertSource[],
+      index: 0,
+      alerts: [],
+      repoScanners: {},
+      truncated: [],
+    };
     await this.ctx.storage.put("securityJob", job);
     await this.schedule();
   }

@@ -30,10 +30,14 @@ await mkdir(OUT, { recursive: true });
 
 const mock = await startMockGitHub(MOCK_PORT);
 // 127.0.0.1, not localhost: Vite may otherwise listen on IPv6 only, which Node's fetch can't reach.
-const vite = spawn("pnpm", ["exec", "vite", "--config", "scripts/screenshots/vite.config.ts", "--host", "127.0.0.1", "--port", "5199", "--strictPort"], {
-  stdio: ["ignore", "ignore", "inherit"],
-  detached: true,
-});
+const vite = spawn(
+  "pnpm",
+  ["exec", "vite", "--config", "scripts/screenshots/vite.config.ts", "--host", "127.0.0.1", "--port", "5199", "--strictPort"],
+  {
+    stdio: ["ignore", "ignore", "inherit"],
+    detached: true,
+  },
+);
 const stop = () => {
   try {
     process.kill(-vite.pid!, "SIGTERM");
@@ -52,7 +56,12 @@ try {
   });
 
   for (const theme of ["light", "dark"] as const) {
-    const page = await browser.newPage({ viewport: { width: 1440, height: 1080 }, deviceScaleFactor: 2, colorScheme: theme, reducedMotion: "reduce" });
+    const page = await browser.newPage({
+      viewport: { width: 1440, height: 1080 },
+      deviceScaleFactor: 2,
+      colorScheme: theme,
+      reducedMotion: "reduce",
+    });
     await page.addInitScript((t) => localStorage.setItem("theme", t), theme);
     await page.goto(APP);
     await page.getByText("@demo").waitFor();

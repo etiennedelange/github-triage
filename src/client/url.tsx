@@ -20,7 +20,11 @@ export function navigate(href: string) {
 
 /** The `?repo=owner/name` filter, if valid. */
 export function useRepoFilter(): string | undefined {
-  const raw = useSyncExternalStore(subscribe, () => new URLSearchParams(location.search).get("repo"), () => null);
+  const raw = useSyncExternalStore(
+    subscribe,
+    () => new URLSearchParams(location.search).get("repo"),
+    () => null,
+  );
   return raw && /^[\w.-]+\/[\w.-]+$/.test(raw) ? raw : undefined;
 }
 

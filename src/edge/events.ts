@@ -4,13 +4,7 @@ import { z } from "zod";
 
 import { CLAUDE_BOT, claudeBranchIssue, type ClaudeSignal } from "@/lib/claude";
 import type { ActivityEvent } from "@/lib/github/activity";
-import {
-  codeScanningAlert,
-  dependabotAlert,
-  secretScanningAlert,
-  type AlertSource,
-  type SecurityAlert,
-} from "@/lib/triage";
+import { codeScanningAlert, dependabotAlert, secretScanningAlert, type AlertSource, type SecurityAlert } from "@/lib/triage";
 
 /** A PR or issue to refetch, as "owner/name#number". */
 export type SubjectKey = `${string}#${number}`;
@@ -85,7 +79,8 @@ export function changesFor(event: string, raw: unknown): Change[] {
       if (!repo || !p.pull_request) return [];
       const out: Change[] = [{ kind: "subject", key: subjectKey(repo, p.pull_request.number) }];
       const issue = event === "pull_request" && p.action === "opened" && claudeBranchIssue(p.pull_request.head?.ref ?? "");
-      if (issue && p.pull_request.html_url) out.push({ kind: "claude", signal: { kind: "pr", repo, number: issue, url: p.pull_request.html_url } });
+      if (issue && p.pull_request.html_url)
+        out.push({ kind: "claude", signal: { kind: "pr", repo, number: issue, url: p.pull_request.html_url } });
       return out;
     }
 
@@ -130,10 +125,7 @@ export function changesFor(event: string, raw: unknown): Change[] {
     case "installation":
       return [{ kind: "resync" }];
     case "installation_repositories":
-      return [
-        ...(p.repositories_removed ?? []).map((r) => ({ kind: "repo-gone", repo: r.full_name }) as const),
-        { kind: "resync" },
-      ];
+      return [...(p.repositories_removed ?? []).map((r) => ({ kind: "repo-gone", repo: r.full_name }) as const), { kind: "resync" }];
 
     case "dependabot_alert":
     case "code_scanning_alert":

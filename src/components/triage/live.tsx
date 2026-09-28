@@ -113,7 +113,12 @@ function connect() {
     // 4001: signed out elsewhere. No point reconnecting.
     const lastLiveAt = (s: State) => (s.status === "live" ? Date.now() : s.lastLiveAt);
     if (!users || e.code === 4001) {
-      return update((s) => ({ ...s, status: e.code === 4001 ? "offline" : "off", lastLiveAt: lastLiveAt(s), downSince: e.code === 4001 ? 0 : s.downSince }));
+      return update((s) => ({
+        ...s,
+        status: e.code === 4001 ? "offline" : "off",
+        lastLiveAt: lastLiveAt(s),
+        downSince: e.code === 4001 ? 0 : s.downSince,
+      }));
     }
     update((s) => ({ ...s, status: "offline", lastLiveAt: lastLiveAt(s), downSince: s.downSince ?? Date.now() }));
     retry = setTimeout(connect, backoff);
@@ -285,9 +290,7 @@ export function LiveStatus() {
         <span className="hidden sm:inline">Connecting</span>
       ) : (
         // Offline is always named: it's the one state where the board may be out of date.
-        <span>
-          Offline{since && <span className="hidden sm:inline"> · current as of {since}</span>}
-        </span>
+        <span>Offline{since && <span className="hidden sm:inline"> · current as of {since}</span>}</span>
       )}
     </span>
   );

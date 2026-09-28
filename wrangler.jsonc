@@ -9,7 +9,7 @@
     // Every request goes through the Worker first, so the app itself sits behind the session check.
     "run_worker_first": true,
     "not_found_handling": "single-page-application",
-    "binding": "ASSETS"
+    "binding": "ASSETS",
   },
   // The Hub is the app's only store: OAuth tokens, the inbox snapshot, the security report, live sockets.
   "durable_objects": { "bindings": [{ "name": "HUB", "class_name": "Hub" }] },
@@ -18,14 +18,14 @@
   "vars": {
     // Comma-separated GitHub logins allowed to sign in.
     "ALLOWED_LOGINS": "etiennedelange",
-    "TRIAGE_OWNERS": ""
+    "TRIAGE_OWNERS": "",
   },
   // `wrangler preview`: same (non-secret) vars as production, since ALLOWED_LOGINS is just a login list.
   "previews": {
     "vars": {
       "ALLOWED_LOGINS": "etiennedelange",
-      "TRIAGE_OWNERS": ""
-    }
-  }
+      "TRIAGE_OWNERS": "",
+    },
+  },
   // Secrets (wrangler secret put): GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET, GITHUB_WEBHOOK_SECRET, SESSION_SECRET
 }
