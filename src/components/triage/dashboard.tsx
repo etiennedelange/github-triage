@@ -186,7 +186,7 @@ function ActivityPanel({ repo, oauth }: { repo?: string; oauth: boolean }) {
       </Panel>
     );
   }
-  const { events, stars, followers, watchers, warning } = result.data;
+  const { events, stars, followers, watchers, warning, starsSince } = result.data;
   // A repo filter keeps that repo's stars and watchers; follows aren't about any repo.
   const shown = repo ? events.filter((e) => e.kind !== "follow" && e.repo === repo) : events;
   const firstSeen = shown.some((e) => e.kind === "watch" || (e.kind === "follow" && !e.exact));
@@ -204,6 +204,12 @@ function ActivityPanel({ repo, oauth }: { repo?: string; oauth: boolean }) {
             {plural(stars, "star", "stars")} · {plural(watchers, "watcher", "watchers")} across your repos · {plural(followers, "follower", "followers")}
             {firstSeen && " · GitHub keeps no date for watches (or some follows): \"first seen\" is when this dashboard noticed them"}
           </p>
+          {starsSince && (
+            <p>
+              GitHub doesn't let the App list who starred your repos, so stars show as they arrive, since{" "}
+              {new Date(starsSince).toLocaleDateString()}.
+            </p>
+          )}
           {warning && (
             <p role="status" className={cn("flex items-start gap-1 rounded-md px-1.5 py-1 break-words", TONE.warning)}>
               <TriangleAlert aria-hidden className="mt-px size-3 shrink-0" />

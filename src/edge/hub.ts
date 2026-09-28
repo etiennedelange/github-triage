@@ -1,7 +1,7 @@
 import { DurableObject } from "cloudflare:workers";
 
 import { GitHubError, mapLimit, type GitHubAuth } from "@/lib/github/http";
-import { diffSeen, fetchSnapshot, toActivity, watcherKey, type Activity, type Seen } from "@/lib/github/activity";
+import { diffSeen, fetchSnapshot, logStar, toActivity, watcherKey, type Activity, type Seen, type StarLog } from "@/lib/github/activity";
 import { fetchInbox, fetchRateLimits, fetchViewerLogin, type Inbox, type RateLimits } from "@/lib/github/inbox";
 import { asResult, MissingTokenError, ScanPendingError, type Result } from "@/lib/github/result";
 import { listInstalledRepos, listOwnedRepos, scanOne, SCANNERS, type SecurityReport } from "@/lib/github/security";
@@ -102,8 +102,14 @@ export class Hub extends DurableObject<EdgeEnv> {
     await this.ctx.storage.put("lastEventAt", at);
     // The stored inbox may now be out of date: the next page load refetches it.
     await this.ctx.storage.delete("inbox");
-    const activity = changes.some((c) => c.kind === "activity");
-    if (activity) await this.ctx.storage.delete("activity");
+    const stars = changes.flatMap((c) => (c.kind === "star" ? [c] : []));
+    const activity = stars.length > 0;
+    if (activity) {
+      let log = await this.starLog();
+      for (const c of stars) log = logStar(log, c.star, c.starred);
+      await this.ctx.storage.put("starLog", log);
+      await this.ctx.storage.delete("activity");
+    }
     // Before the no-tab return: the stored scan must forget the repo even with nobody watching.
     const goneRepos = changes.flatMap((c) => (c.kind === "repo-gone" ? [c.repo] : []));
     const goneAlerts = goneRepos.length ? await this.forgetRepos(goneRepos) : [];
@@ -159,10 +165,19 @@ export class Hub extends DurableObject<EdgeEnv> {
         !snap.complete.followers && prev ? prev : { seen: diffSeen(prev?.seen, snap.followers.map((f) => f.login), fetchedAt) };
       const watchers =
         !snap.complete.watchers && prevWatchers ? prevWatchers : { seen: diffSeen(prevWatchers?.seen, snap.watchers.map(watcherKey), fetchedAt) };
-      const activity = toActivity(snap, { followers: followers.seen, watchers: watchers.seen }, fetchedAt);
+      const activity = toActivity(snap, { followers: followers.seen, watchers: watchers.seen }, await this.starLog(), fetchedAt);
       await this.ctx.storage.put({ followers, watchers, activity });
       return activity;
     });
+  }
+
+  /** Started on first use, so "stars since" has a date even before the first star arrives. */
+  private async starLog(): Promise<StarLog> {
+    const log = await this.ctx.storage.get<StarLog>("starLog");
+    if (log) return log;
+    const fresh: StarLog = { since: new Date().toISOString(), stars: [] };
+    await this.ctx.storage.put("starLog", fresh);
+    return fresh;
   }
 
   /** Live, uncached: `/rate_limit` costs nothing against either budget. */

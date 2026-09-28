@@ -2,6 +2,7 @@
 
 import { z } from "zod";
 
+import type { ActivityEvent } from "@/lib/github/activity";
 import {
   codeScanningAlert,
   dependabotAlert,
@@ -25,7 +26,7 @@ export type Change =
   /** Deleted, archived or removed from the installation: drop its security alerts. */
   | { kind: "repo-gone"; repo: string }
   /** Someone starred or unstarred one of your repos. */
-  | { kind: "activity" }
+  | { kind: "star"; starred: boolean; star: Extract<ActivityEvent, { kind: "star" }> }
   /** The installation's repo set changed: only a full refetch can tell what's visible now. */
   | { kind: "resync" };
 
@@ -40,6 +41,8 @@ const payload = z.looseObject({
   check_suite: z.looseObject({ pull_requests: z.array(z.looseObject({ number: z.number() })) }).optional(),
   alert: z.looseObject({ number: z.number(), html_url: z.string() }).optional(),
   repositories_removed: z.array(z.looseObject({ full_name: z.string() })).optional(),
+  sender: z.looseObject({ login: z.string(), avatar_url: z.string(), html_url: z.string() }).optional(),
+  starred_at: z.string().nullish(),
 });
 type Payload = z.infer<typeof payload>;
 
@@ -95,8 +98,13 @@ export function changesFor(event: string, raw: unknown): Change[] {
       return repo && ["deleted", "archived"].includes(p.action ?? "") ? [{ kind: "repo-gone", repo }] : [];
 
     // Needs the App subscribed to Star events. Follows have no webhook; they're polled.
-    case "star":
-      return [{ kind: "activity" }];
+    case "star": {
+      if (!repo || !p.sender || (p.action !== "created" && p.action !== "deleted")) return [];
+      const user = { login: p.sender.login, avatarUrl: p.sender.avatar_url, url: p.sender.html_url };
+      // An unstar has no starred_at; its time only matters for ordering, which it leaves.
+      const star = { kind: "star", at: p.starred_at ?? new Date().toISOString(), user, repo } as const;
+      return [{ kind: "star", starred: p.action === "created", star }];
+    }
 
     case "installation":
       return [{ kind: "resync" }];

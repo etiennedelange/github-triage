@@ -43,7 +43,7 @@ export async function graphql<T>(
   { token, api }: GitHubAuth,
   query: string,
   variables: Record<string, unknown>,
-  { partial = false, onErrors }: { partial?: boolean; onErrors?: (message: string) => void } = {},
+  { partial = false, onErrors }: { partial?: boolean; onErrors?: (errors: GraphQLErrorEntry[]) => void } = {},
 ): Promise<T> {
   const res = await fetch(`${base(api)}/graphql`, {
     method: "POST",
@@ -58,11 +58,11 @@ export async function graphql<T>(
   };
   if (!res.ok) throw new GitHubError(body.message ?? res.statusText, res.status);
   if (body.errors?.length && !(partial && body.data)) throw new GitHubError(describeErrors(body.errors), 200);
-  if (body.errors?.length) onErrors?.(describeErrors(body.errors));
+  if (body.errors?.length) onErrors?.(body.errors);
   return body.data as T;
 }
 
-type GraphQLErrorEntry = { message: string; path?: (string | number)[] };
+export type GraphQLErrorEntry = { message: string; path?: (string | number)[] };
 
 /** One line per distinct message, with a few of the fields it hit: GitHub repeats it per node. */
 export function describeErrors(errors: GraphQLErrorEntry[]): string {

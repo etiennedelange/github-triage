@@ -6,7 +6,7 @@
 
 import { z } from "zod";
 
-import { graphql, type GitHubAuth } from "./http";
+import { describeErrors, graphql, type GitHubAuth, type GraphQLErrorEntry } from "./http";
 
 /** Latest stars per repo; older ones rarely matter for "who starred me lately". */
 const STARS_PER_REPO = 10;
@@ -27,6 +27,11 @@ export type ActivityEvent =
 
 export type Activity = {
   events: ActivityEvent[];
+  /**
+   * Set when GitHub won't list stargazers to this token (the App's user token can't): only
+   * stars that arrived by webhook since this time are shown.
+   */
+  starsSince?: string;
   followers: number;
   stars: number;
   /** Other people watching your repos (GitHub counts you as watching your own). */
@@ -85,6 +90,7 @@ const response = z.object({
 type Follower = ActivityUser & { followedAt: string | null };
 
 export type Snapshot = {
+  viewer: string;
   followers: Follower[];
   followerCount: number;
   stars: Extract<ActivityEvent, { kind: "star" }>[];
@@ -92,14 +98,14 @@ export type Snapshot = {
   watchers: Omit<Extract<ActivityEvent, { kind: "watch" }>, "at">[];
   watcherCount: number;
   /** False when GitHub refused that part: an empty list then means "unknown", not "nobody". */
-  complete: { followers: boolean; watchers: boolean };
+  complete: { followers: boolean; watchers: boolean; stars: boolean };
   warning?: string;
 };
 
 /** Your followers (up to 1,000), and the latest stars and some watchers on each of your repos (up to 100 repos). */
 export async function fetchSnapshot(auth: GitHubAuth): Promise<Snapshot> {
-  const warnings = new Set<string>();
-  const opts = { partial: true, onErrors: (m: string) => void warnings.add(m) };
+  const errors: GraphQLErrorEntry[] = [];
+  const opts = { partial: true, onErrors: (e: GraphQLErrorEntry[]) => void errors.push(...e) };
   const first = response.parse(await graphql(auth, QUERY, { after: null, withRepos: true, stars: STARS_PER_REPO, watchers: WATCHERS_PER_REPO }, opts));
   type Edge = { cursor: string; node: ActivityUser | null } | null;
   let followersComplete = Boolean(first.viewer.followers);
@@ -122,9 +128,11 @@ export async function fetchSnapshot(auth: GitHubAuth): Promise<Snapshot> {
     (r.watchers?.nodes ?? []).flatMap((u) => (u && u.login !== me ? [{ kind: "watch", user: u, repo: r.nameWithOwner } as const] : [])),
   );
   return {
+    viewer: me,
     followers,
     followerCount: first.viewer.followers?.totalCount ?? followers.length,
-    warning: warnings.size ? [...warnings].join("; ") : undefined,
+    // Stargazers are expected to be refused to the App (the webhook log covers them): not a warning.
+    warning: describeErrors(errors.filter((e) => !isStargazerError(e))) || undefined,
     // Your own stars aren't news; the total is GitHub's and still counts them.
     stars: repos.flatMap((r) =>
       (r.stargazers?.edges ?? []).flatMap((e) =>
@@ -136,10 +144,23 @@ export async function fetchSnapshot(auth: GitHubAuth): Promise<Snapshot> {
     complete: {
       followers: followersComplete,
       watchers: Boolean(first.viewer.repositories) && repos.every((r) => r.watchers && !r.watchers.nodes.includes(null)),
+      stars: Boolean(first.viewer.repositories) && !errors.some(isStargazerError),
     },
     // Minus yourself on each repo you watch (you do by default).
     watcherCount: repos.reduce((n, r) => n + (r.watchers?.totalCount ?? 0) - (r.watchers?.nodes.some((u) => u?.login === me) ? 1 : 0), 0),
   };
+}
+
+const isStargazerError = (e: GraphQLErrorEntry) => e.path?.includes("stargazers") ?? false;
+
+/** Stars recorded from Star webhooks, newest first: the only source when stargazers can't be listed. */
+export type StarLog = { since: string; stars: Extract<ActivityEvent, { kind: "star" }>[] };
+const STAR_LOG_KEPT = 100;
+const starKey = (s: { repo: string; user: ActivityUser }) => `${s.repo} ${s.user.login}`;
+
+export function logStar(log: StarLog, star: Extract<ActivityEvent, { kind: "star" }>, starred: boolean): StarLog {
+  const rest = log.stars.filter((s) => starKey(s) !== starKey(star));
+  return { ...log, stars: starred ? [star, ...rest].slice(0, STAR_LOG_KEPT) : rest };
 }
 
 /**
@@ -172,7 +193,7 @@ export function diffSeen(prev: Seen | undefined, current: string[], now: string)
   return next;
 }
 
-export function toActivity(snap: Snapshot, seen: { followers: Seen; watchers: Seen }, fetchedAt: string): Activity {
+export function toActivity(snap: Snapshot, seen: { followers: Seen; watchers: Seen }, log: StarLog, fetchedAt: string): Activity {
   const follows = snap.followers.flatMap(({ followedAt, ...user }): ActivityEvent[] => {
     const at = followedAt ?? seen.followers[user.login];
     return at ? [{ kind: "follow", at, user, exact: Boolean(followedAt) }] : [];
@@ -181,6 +202,9 @@ export function toActivity(snap: Snapshot, seen: { followers: Seen; watchers: Se
     const at = seen.watchers[watcherKey(w)];
     return at ? [{ ...w, at }] : [];
   });
-  const events = [...snap.stars, ...follows, ...watches].toSorted((a, b) => b.at.localeCompare(a.at)).slice(0, ACTIVITY_KEPT);
-  return { events, followers: snap.followerCount, stars: snap.starCount, watchers: snap.watcherCount, warning: snap.warning, fetchedAt };
+  const listed = new Set(snap.stars.map(starKey));
+  // Your own stars aren't news (the webhook sends them too).
+  const stars = [...snap.stars, ...log.stars.filter((s) => !listed.has(starKey(s)) && s.user.login !== snap.viewer)];
+  const events = [...stars, ...follows, ...watches].toSorted((a, b) => b.at.localeCompare(a.at)).slice(0, ACTIVITY_KEPT);
+  return { events, starsSince: snap.complete.stars ? undefined : log.since, followers: snap.followerCount, stars: snap.starCount, watchers: snap.watcherCount, warning: snap.warning, fetchedAt };
 }
