@@ -197,7 +197,9 @@ export default defineConfig({
       "src/styles/brand.css",
     ],
   },
-  plugins: lazyPlugins(() => [react(), tailwindcss(), cloudflare()]),
+  // React Compiler through Oxc (experimental). Components it can't compile are left as written;
+  // `compiler: { logDiagnostics: true }` lists them and why.
+  plugins: lazyPlugins(() => [react({ compiler: true }), tailwindcss(), cloudflare()]),
   // One ID per build, baked into both halves: a tab whose ID differs from the Worker's is out of date.
   // Kept in the environment because this config is evaluated once per build (client, then Worker).
   define: { __BUILD_ID__: JSON.stringify((process.env.BUILD_ID ??= Date.now().toString(36))) },
