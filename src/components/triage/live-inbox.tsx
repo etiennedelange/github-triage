@@ -1,10 +1,11 @@
 import { CircleCheck, CircleDot, Eye, GitPullRequest, GitPullRequestArrow, Inbox as InboxIcon, ShieldAlert } from "lucide-react";
-import type { ReactNode } from "react";
+import { Children, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 
 import { useSecurity } from "@/client/api";
 
 import type { Inbox } from "@/lib/github/inbox";
 import type { SecurityReport } from "@/lib/github/security";
+import { balancedSplit } from "@/lib/layout";
 import { overlayAlerts, overlayItems } from "@/lib/live";
 import {
   countBySeverity,
@@ -96,94 +97,135 @@ export function LiveInbox({
 
       <RepoChips lists={[review.all, mine.all, incoming.all, assigned.all, untriaged.all]} active={repo} />
 
-      {/* Two stacks: what's waiting on you on the left, FYI on the right. Each stacks on its own, so a
-          short panel leaves no hole, and a live update never moves a panel to the other column. */}
-      <div id="panels" tabIndex={-1} className="grid scroll-mt-4 items-start gap-3 outline-none lg:grid-cols-2">
-        <div className="space-y-3">
-          <Panel
-            id="review"
-            icon={Eye}
-            title="Needs your review"
-            count={review.items.length}
-            empty={`No reviews waiting on you${where}.`}
-            footer={more("pulls", "review", review)}
-          >
-            {review.items.map((pr) => (
-              <PrRow
-                key={rowKey(pr.url, review.live, returned)}
-                live={review.live.has(pr.url) || returned.has(pr.url)}
-                pr={pr}
-                perspective="reviewer"
-              />
-            ))}
-          </Panel>
-          <Panel
-            id="mine"
-            icon={GitPullRequest}
-            title="Your pull requests"
-            count={mine.items.length}
-            empty={`No open pull requests${where}.`}
-            footer={more("pulls", "mine", mine)}
-          >
-            {mineSorted.map((pr) => (
-              <PrRow
-                key={rowKey(pr.url, mine.live, returned)}
-                live={mine.live.has(pr.url) || returned.has(pr.url)}
-                pr={pr}
-                perspective="author"
-              />
-            ))}
-          </Panel>
-          {securityPanel}
-          <Panel
-            id="assigned"
-            icon={CircleDot}
-            title="Assigned to you"
-            count={assigned.items.length}
-            empty={`No issues assigned to you${where}.`}
-            footer={more("issues", "assigned", assigned)}
-          >
-            {assigned.items.map((i) => (
-              <IssueRow key={rowKey(i.url, assigned.live, returned)} live={assigned.live.has(i.url) || returned.has(i.url)} issue={i} />
-            ))}
-          </Panel>
-        </div>
-        <div className="space-y-3">
-          <Panel
-            quiet
-            id="incoming"
-            icon={GitPullRequestArrow}
-            title="Incoming pull requests"
-            count={incoming.items.length}
-            empty={repo ? `No one else has PRs open on ${repo}.` : "No one else has PRs open on your repos."}
-            footer={more("pulls", "incoming", incoming)}
-          >
-            {incoming.items.map((pr) => (
-              <PrRow
-                key={rowKey(pr.url, incoming.live, returned)}
-                live={incoming.live.has(pr.url) || returned.has(pr.url)}
-                pr={pr}
-                perspective="reviewer"
-              />
-            ))}
-          </Panel>
-          <Panel
-            quiet
-            id="untriaged"
-            icon={InboxIcon}
-            title="Unassigned issues"
-            count={untriaged.items.length}
-            empty={repo ? `Every issue on ${repo} has an owner.` : "Every issue on your repos has an owner."}
-            footer={more("issues", "untriaged", untriaged)}
-          >
-            {untriaged.items.map((i) => (
-              <IssueRow key={rowKey(i.url, untriaged.live, returned)} live={untriaged.live.has(i.url) || returned.has(i.url)} issue={i} />
-            ))}
-          </Panel>
-          {branchesPanel}
-          {activityPanel}
-        </div>
-      </div>
+      {/* What's waiting on you on the left, FYI on the right, unless that leaves a hole: then the
+          split moves along the same order. Each column stacks on its own. */}
+      <Stacks split={4}>
+        <Panel
+          id="review"
+          icon={Eye}
+          title="Needs your review"
+          count={review.items.length}
+          empty={`No reviews waiting on you${where}.`}
+          footer={more("pulls", "review", review)}
+        >
+          {review.items.map((pr) => (
+            <PrRow
+              key={rowKey(pr.url, review.live, returned)}
+              live={review.live.has(pr.url) || returned.has(pr.url)}
+              pr={pr}
+              perspective="reviewer"
+            />
+          ))}
+        </Panel>
+        <Panel
+          id="mine"
+          icon={GitPullRequest}
+          title="Your pull requests"
+          count={mine.items.length}
+          empty={`No open pull requests${where}.`}
+          footer={more("pulls", "mine", mine)}
+        >
+          {mineSorted.map((pr) => (
+            <PrRow
+              key={rowKey(pr.url, mine.live, returned)}
+              live={mine.live.has(pr.url) || returned.has(pr.url)}
+              pr={pr}
+              perspective="author"
+            />
+          ))}
+        </Panel>
+        {securityPanel}
+        <Panel
+          id="assigned"
+          icon={CircleDot}
+          title="Assigned to you"
+          count={assigned.items.length}
+          empty={`No issues assigned to you${where}.`}
+          footer={more("issues", "assigned", assigned)}
+        >
+          {assigned.items.map((i) => (
+            <IssueRow key={rowKey(i.url, assigned.live, returned)} live={assigned.live.has(i.url) || returned.has(i.url)} issue={i} />
+          ))}
+        </Panel>
+        <Panel
+          quiet
+          id="incoming"
+          icon={GitPullRequestArrow}
+          title="Incoming pull requests"
+          count={incoming.items.length}
+          empty={repo ? `No one else has PRs open on ${repo}.` : "No one else has PRs open on your repos."}
+          footer={more("pulls", "incoming", incoming)}
+        >
+          {incoming.items.map((pr) => (
+            <PrRow
+              key={rowKey(pr.url, incoming.live, returned)}
+              live={incoming.live.has(pr.url) || returned.has(pr.url)}
+              pr={pr}
+              perspective="reviewer"
+            />
+          ))}
+        </Panel>
+        <Panel
+          quiet
+          id="untriaged"
+          icon={InboxIcon}
+          title="Unassigned issues"
+          count={untriaged.items.length}
+          empty={repo ? `Every issue on ${repo} has an owner.` : "Every issue on your repos has an owner."}
+          footer={more("issues", "untriaged", untriaged)}
+        >
+          {untriaged.items.map((i) => (
+            <IssueRow key={rowKey(i.url, untriaged.live, returned)} live={untriaged.live.has(i.url) || returned.has(i.url)} issue={i} />
+          ))}
+        </Panel>
+        {branchesPanel}
+        {activityPanel}
+      </Stacks>
+    </div>
+  );
+}
+
+/** Tailwind's `lg`, where the panels sit in two columns; `space-y-3` between them. */
+const TWO_COLUMNS = "(min-width: 64rem)";
+const GAP = 12;
+
+/**
+ * Two columns of panels in reading order: the first `split` on the left, the rest on the right.
+ * If that leaves one column much taller, the split moves along the order to even them out.
+ */
+function Stacks({ split: initial, children }: { split: number; children: ReactNode }) {
+  const panels = Children.toArray(children);
+  const [split, setSplit] = useState(initial);
+  const slots = useRef<(HTMLDivElement | null)[]>([]);
+
+  // Moving a panel remounts its slot, so observe again whenever the split changes.
+  useLayoutEffect(() => {
+    const els = slots.current.slice(0, panels.length);
+    const measure = () => {
+      if (!matchMedia(TWO_COLUMNS).matches) return;
+      const heights = els.map((el) => el?.offsetHeight ?? 0);
+      setSplit((k) => balancedSplit(heights, k, GAP));
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    for (const el of els) if (el) observer.observe(el);
+    return () => observer.disconnect();
+  }, [panels.length, split]);
+
+  const slot = (panel: ReactNode, i: number) => (
+    <div
+      key={(panel as { key?: string }).key ?? i}
+      ref={(el) => {
+        slots.current[i] = el;
+      }}
+    >
+      {panel}
+    </div>
+  );
+  return (
+    <div id="panels" tabIndex={-1} className="grid scroll-mt-4 items-start gap-3 outline-none lg:grid-cols-2">
+      <div className="space-y-3">{panels.slice(0, split).map((p, i) => slot(p, i))}</div>
+      <div className="space-y-3">{panels.slice(split).map((p, i) => slot(p, split + i))}</div>
     </div>
   );
 }
