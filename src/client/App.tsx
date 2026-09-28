@@ -3,6 +3,7 @@ import { ShieldCheck } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Account, ApiBudgets, Dashboard } from "@/components/triage/dashboard";
 import { LiveAnnouncer, LiveStatus, NewVersion } from "@/components/triage/live";
+import { NotificationsToggle } from "@/components/triage/notifications";
 import { FxToggle, RefreshButton } from "@/components/triage/refresh-button";
 import { RefreshFx } from "@/components/triage/refresh-fx";
 import { openShortcuts, Shortcuts } from "@/components/triage/shortcuts";
@@ -42,6 +43,7 @@ export function App() {
             </kbd>
           </button>
           <FxToggle />
+          <NotificationsToggle />
           {/* No room on phones; the context line still shows a budget once it runs low. */}
           <span className="ml-auto hidden sm:inline">
             <ApiBudgets />

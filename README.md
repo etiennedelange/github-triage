@@ -61,6 +61,20 @@ After you post, the row shows how far the run has got: _Asked Claude_, then _Cla
 
 This is the only write, so it needs write access to issues: **Issues: Read and write** on the GitHub App, or a token that can comment in local mode. Without it, GitHub's 403 is shown in the popover.
 
+### Desktop notifications
+
+Turn on **Notifications** in the status bar and allow them when the browser asks. A test notification confirms they work. From then on the Hub sends a Web Push for:
+
+- a review requested from you or one of your teams
+- an issue or PR assigned to you
+- a PR or issue opened on your repos by someone else (not bots; Dependabot's PRs come with their own alert)
+- an approval or a change request on your PR
+- a comment that @-mentions you, or any comment on an issue or PR you opened (not from bots)
+- a new security alert
+- a Fix with Claude run that pushes its branch or opens its PR
+
+They come from webhooks, so they need the deployed app (local mode gets no webhooks). They also arrive with every tab of the app closed, as long as the browser is running. If the browser is closed, the push service holds them for a day and delivers them when it next starts. A focused tab of the app gets no notifications; it has the live board. Clicking one opens the item on GitHub. The Hub makes its own VAPID key pair on first use, so there's nothing to configure. Signing out forgets this browser's subscription until you next load the app signed in.
+
 ### Caching
 
 The Hub Durable Object is the only cache. It keeps the PR/issue inbox (a single GraphQL request) for about a minute the last security scan for 15 minutes, stars & followers for five minutes, and stale branches for 15. **Refresh** refetches the inbox, stars & followers and stale branches; webhook events also expire it, so the next page load is fresh. In the browser, TanStack Query shares each response across components.

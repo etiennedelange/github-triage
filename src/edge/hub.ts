@@ -12,7 +12,9 @@ import { sectionsFor, type AlertSource, type Issue, type PullRequest, type Scann
 
 import { HUB_PREFIX, LEGACY_HUB, splitList, type EdgeEnv } from "./env";
 import { changesFor, type SubjectKey } from "./events";
+import { claudeNotice, noticesFor } from "./notices";
 import { clientHello, type ServerMessage } from "./protocol";
+import { generateVapidKeys, sendPush, type PushMessage, type PushSubscriptionJSON, type VapidKeys } from "./push";
 import { fetchAlert, fetchOpenPrs, fetchRecentlyUpdated, fetchSubjects, fetchTeams, subjectUrls } from "./refetch";
 import { TokenKeeper, type StoredTokens } from "./tokens";
 
@@ -40,6 +42,9 @@ const SECURITY_SCAN_INTERVAL_MS = 15 * 60_000;
 /** Repo/scanner calls done per alarm tick: bounded well under any Workers subrequest cap. */
 const SECURITY_SCAN_CHUNK = 15;
 const SECURITY_SCAN_TICK_MS = 2_000;
+
+/** A browser that asked for notifications, by endpoint. `subject`: the app's contact URL for VAPID. */
+type PushSubs = Record<string, { sub: PushSubscriptionJSON; subject: string; at: number }>;
 
 /** Checkpoint for a scan in progress: resumed one bounded chunk at a time across alarm ticks. */
 type SecurityJob = {
@@ -96,7 +101,8 @@ export class Hub extends DurableObject<EdgeEnv> {
   }
 
   async signOut(): Promise<void> {
-    await this.ctx.storage.delete(["tokens", "teams", "inbox", "activity", "branches"]);
+    // Browsers resubscribe on their next signed-in load (see src/client/push.ts).
+    await this.ctx.storage.delete(["tokens", "teams", "inbox", "activity", "branches", "pushSubs"]);
     for (const ws of this.ctx.getWebSockets()) ws.close(4001, "Signed out");
   }
 
@@ -154,7 +160,10 @@ export class Hub extends DurableObject<EdgeEnv> {
     if (branches) await this.ctx.storage.delete("branches");
     // Claude runs advance with nobody watching too, like the star log.
     const signals = changes.flatMap((c) => (c.kind === "claude" ? [c.signal] : []));
-    const claude = signals.length > 0 && (await this.advanceClaude(signals));
+    const advanced = signals.length ? await this.advanceClaude(signals) : [];
+    const claude = advanced.length > 0;
+    // Notifications go out whether or not a tab is open: they're for when none is.
+    await this.notify(event, payload, changes, advanced);
     // Before the no-tab return: the stored scan must forget the repo even with nobody watching.
     const goneRepos = changes.flatMap((c) => (c.kind === "repo-gone" ? [c.repo] : []));
     const goneAlerts = goneRepos.length ? await this.forgetRepos(goneRepos) : [];
@@ -297,14 +306,97 @@ export class Hub extends DurableObject<EdgeEnv> {
     });
   }
 
-  /** Applies webhook progress to stored runs; true if any run changed. */
-  private async advanceClaude(signals: ClaudeSignal[]): Promise<boolean> {
+  /** Applies webhook progress to stored runs; returns the runs that moved to a new state. */
+  private async advanceClaude(signals: ClaudeSignal[]): Promise<ClaudeRun[]> {
     const before = (await this.ctx.storage.get<ClaudeRuns>("claudeRuns")) ?? {};
     const now = new Date().toISOString();
     const after = signals.reduce((runs, sig) => advanceRun(runs, sig, now), before);
-    if (after === before) return false;
+    if (after === before) return [];
     await this.ctx.storage.put("claudeRuns", after);
-    return true;
+    return Object.entries(after).flatMap(([key, run]) => (before[key]?.state !== run.state ? [run] : []));
+  }
+
+  // ---------- RPC: desktop notifications (Web Push) ----------
+
+  /** The public key browsers subscribe with. Made on first use and kept: a new one voids every subscription. */
+  async pushKey(): Promise<string> {
+    return (await this.vapidKeys()).publicKey;
+  }
+
+  private async vapidKeys(): Promise<VapidKeys> {
+    let keys = await this.ctx.storage.get<VapidKeys>("vapid");
+    if (!keys) {
+      keys = await generateVapidKeys();
+      await this.ctx.storage.put("vapid", keys);
+    }
+    return keys;
+  }
+
+  /** Remembers this browser; `test` sends a notification straight away so you can see it works. */
+  subscribePush(sub: PushSubscriptionJSON, origin: string, test: boolean): Promise<Result<void>> {
+    return asResult(async () => {
+      const login = await this.viewerLogin();
+      // VAPID wants an https: or mailto: contact; local development has neither.
+      const subject = origin.startsWith("https:") ? origin : `mailto:${login}@users.noreply.github.com`;
+      const subs = (await this.ctx.storage.get<PushSubs>("pushSubs")) ?? {};
+      await this.ctx.storage.put("pushSubs", { ...subs, [sub.endpoint]: { sub, subject, at: Date.now() } });
+      if (!test) return;
+      const sent = await sendPush(
+        await this.vapidKeys(),
+        sub,
+        {
+          title: "Notifications are on",
+          body: "New review requests, assignments, mentions, security alerts and Claude runs will show up here.",
+          url: origin,
+          tag: "test",
+          always: true,
+        },
+        subject,
+      );
+      if (sent.ok) return;
+      await this.unsubscribePush(sub.endpoint);
+      throw new Error(`The push service refused the test notification (${sent.status}).`);
+    });
+  }
+
+  async unsubscribePush(endpoint: string): Promise<void> {
+    const subs = (await this.ctx.storage.get<PushSubs>("pushSubs")) ?? {};
+    delete subs[endpoint];
+    await this.ctx.storage.put("pushSubs", subs);
+  }
+
+  /** Notifications for one webhook, to every subscribed browser. Never throws: the webhook's other work matters more. */
+  private async notify(event: string, payload: unknown, changes: ReturnType<typeof changesFor>, advanced: ClaudeRun[]): Promise<void> {
+    const subs = (await this.ctx.storage.get<PushSubs>("pushSubs")) ?? {};
+    if (!Object.keys(subs).length) return;
+    try {
+      const owners = [await this.viewerLogin(), ...splitList(this.env.TRIAGE_OWNERS)];
+      // Teams as last fetched: a GitHub call here would be for the rare team review request.
+      const teams = (await this.ctx.storage.get<{ list: string[] }>("teams"))?.list ?? [];
+      const messages: PushMessage[] = [
+        ...noticesFor(event, payload, changes, { viewer: owners[0], owners, teams }),
+        ...advanced.flatMap((run) => claudeNotice(run) ?? []),
+      ];
+      if (!messages.length) return;
+      const keys = await this.vapidKeys();
+      const gone: string[] = [];
+      await Promise.all(
+        Object.values(subs).flatMap(({ sub, subject }) =>
+          messages.map(async (m) => {
+            const res = await sendPush(keys, sub, m, subject).catch((err) => (console.error("hub: push failed", err), undefined));
+            if (res?.gone) gone.push(sub.endpoint);
+            else if (res && !res.ok) console.error(`hub: push refused (${res.status})`);
+          }),
+        ),
+      );
+      if (gone.length) {
+        const now = (await this.ctx.storage.get<PushSubs>("pushSubs")) ?? {};
+        for (const endpoint of gone) delete now[endpoint];
+        await this.ctx.storage.put("pushSubs", now);
+      }
+    } catch (err) {
+      console.error("hub: notify failed", err);
+    }
   }
 
   /** Live, uncached: `/rate_limit` costs nothing against either budget. */
