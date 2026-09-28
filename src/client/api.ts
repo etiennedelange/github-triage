@@ -30,6 +30,10 @@ export const useSession = () => useQuery({ queryKey: ["session"], queryFn: async
 
 export const useInbox = () => useQuery({ queryKey: ["inbox"], queryFn: async () => json(await api.inbox.$get()) });
 
+/** Stars arrive live (a webhook invalidates this); follows have no webhook, so poll for them. */
+export const useActivity = () =>
+  useQuery({ queryKey: ["activity"], queryFn: async () => json(await api.activity.$get()), refetchInterval: 5 * 60_000 });
+
 export const useRateLimits = () =>
   useQuery({ queryKey: ["rate-limits"], queryFn: async () => json(await api["rate-limits"].$get()), refetchInterval: 60_000 });
 
@@ -47,7 +51,8 @@ export const useSecurity = () =>
  * have finished, or dropped a deleted repo, since this tab loaded it.
  */
 export async function refreshAll(): Promise<void> {
-  const inbox = await json(await api.refresh.$post());
+  const [inbox, activity] = await Promise.all([api.refresh.$post().then(json), api.activity.$post().then(json)]);
   queryClient.setQueryData(["inbox"], inbox);
+  queryClient.setQueryData(["activity"], activity);
   await queryClient.invalidateQueries({ predicate: (q) => q.queryKey[0] === "rate-limits" || q.queryKey[0] === "security" });
 }

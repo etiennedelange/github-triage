@@ -9,10 +9,13 @@ import {
   KeyRound,
   MessageSquare,
   Package,
+  Star,
+  UserPlus,
 } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import type { ActivityEvent } from "@/lib/github/activity";
 import {
   isStale,
   prNextStep,
@@ -255,6 +258,31 @@ export function AlertRow({ alert, live }: LiveProp & { alert: SecurityAlert }) {
         </>
       }
       trailing={<Pill tone={SEVERITY_TONE[alert.severity]} className="capitalize">{alert.severity}</Pill>}
+    />
+  );
+}
+
+/** A star on one of your repos, or a new follower. Links to the person. */
+export function ActivityRow({ event }: { event: ActivityEvent }) {
+  const star = event.kind === "star";
+  const Icon = star ? Star : UserPlus;
+  return (
+    <Row
+      icon={<img src={event.user.avatarUrl} alt="" width={16} height={16} className="size-4 rounded-full" />}
+      title={`${event.user.login} ${star ? "starred" : "followed you"}`}
+      url={event.user.url}
+      meta={
+        <>
+          <Icon aria-hidden className={cn("size-3", star && "text-warning")} />
+          {star && <RepoLink repo={event.repo} />}
+          <Age
+            iso={event.at}
+            verb={star ? "starred" : event.exact ? "followed" : "first seen following"}
+            flagStale={false}
+          />
+          {!star && !event.exact && <span>(first seen)</span>}
+        </>
+      }
     />
   );
 }

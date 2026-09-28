@@ -1,6 +1,7 @@
 import { DurableObject } from "cloudflare:workers";
 
 import { GitHubError, mapLimit, type GitHubAuth } from "@/lib/github/http";
+import { diffFollowers, fetchSnapshot, toActivity, type Activity, type SeenFollowers } from "@/lib/github/activity";
 import { fetchInbox, fetchRateLimits, fetchViewerLogin, type Inbox, type RateLimits } from "@/lib/github/inbox";
 import { asResult, MissingTokenError, ScanPendingError, type Result } from "@/lib/github/result";
 import { listInstalledRepos, listOwnedRepos, scanOne, SCANNERS, type SecurityReport } from "@/lib/github/security";
@@ -24,6 +25,8 @@ const TEAMS_TTL_MS = 24 * 3_600_000;
 /** The stored inbox is served for this long; Refresh and webhook events end it early. */
 const INBOX_MAX_AGE_MS = 60_000;
 const DELIVERIES_KEPT = 200;
+/** Stars arrive by webhook; follows don't, so this is how late a new follower can show up. */
+const ACTIVITY_MAX_AGE_MS = 5 * 60_000;
 
 /** A security scan is redone once the last one is this old. */
 const SECURITY_SCAN_INTERVAL_MS = 15 * 60_000;
@@ -82,7 +85,7 @@ export class Hub extends DurableObject<EdgeEnv> {
   }
 
   async signOut(): Promise<void> {
-    await this.ctx.storage.delete(["tokens", "teams", "inbox"]);
+    await this.ctx.storage.delete(["tokens", "teams", "inbox", "activity"]);
     for (const ws of this.ctx.getWebSockets()) ws.close(4001, "Signed out");
   }
 
@@ -99,6 +102,8 @@ export class Hub extends DurableObject<EdgeEnv> {
     await this.ctx.storage.put("lastEventAt", at);
     // The stored inbox may now be out of date: the next page load refetches it.
     await this.ctx.storage.delete("inbox");
+    const activity = changes.some((c) => c.kind === "activity");
+    if (activity) await this.ctx.storage.delete("activity");
     // Before the no-tab return: the stored scan must forget the repo even with nobody watching.
     const goneRepos = changes.flatMap((c) => (c.kind === "repo-gone" ? [c.repo] : []));
     const goneAlerts = goneRepos.length ? await this.forgetRepos(goneRepos) : [];
@@ -106,6 +111,7 @@ export class Hub extends DurableObject<EdgeEnv> {
     if (!this.ctx.getWebSockets().length) return;
 
     for (const url of goneAlerts) this.broadcast({ type: "alert-gone", at, url });
+    if (activity) this.broadcast({ type: "activity", at });
     const keys: QueueKey[] = [];
     for (const c of changes) {
       if (c.kind === "subject") keys.push(c.key);
@@ -136,6 +142,21 @@ export class Hub extends DurableObject<EdgeEnv> {
       const inbox = await this.withAuth((auth) => fetchInbox(auth, [viewer, ...splitList(this.env.TRIAGE_OWNERS)]));
       await this.ctx.storage.put("inbox", inbox);
       return inbox;
+    });
+  }
+
+  /** Stars and follows, from storage for five minutes; `force` (Refresh) refetches. */
+  getActivity(force = false): Promise<Result<Activity>> {
+    return asResult(async () => {
+      const cached = await this.ctx.storage.get<Activity>("activity");
+      if (!force && cached && Date.now() - Date.parse(cached.fetchedAt) < ACTIVITY_MAX_AGE_MS) return cached;
+      const fetchedAt = new Date().toISOString();
+      const snap = await this.withAuth(fetchSnapshot);
+      const prev = await this.ctx.storage.get<{ since: string; seen: SeenFollowers }>("followers");
+      const followers = { since: prev?.since ?? fetchedAt, seen: diffFollowers(prev?.seen, snap.followers, fetchedAt) };
+      const activity = toActivity(snap, followers.seen, followers.since, fetchedAt);
+      await this.ctx.storage.put({ followers, activity });
+      return activity;
     });
   }
 

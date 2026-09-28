@@ -24,6 +24,8 @@ export type Change =
   | { kind: "alert-refetch"; repo: string; source: AlertSource; number: number }
   /** Deleted, archived or removed from the installation: drop its security alerts. */
   | { kind: "repo-gone"; repo: string }
+  /** Someone starred or unstarred one of your repos. */
+  | { kind: "activity" }
   /** The installation's repo set changed: only a full refetch can tell what's visible now. */
   | { kind: "resync" };
 
@@ -91,6 +93,10 @@ export function changesFor(event: string, raw: unknown): Change[] {
     // Needs the App subscribed to Repository events. Scans skip archived repos too.
     case "repository":
       return repo && ["deleted", "archived"].includes(p.action ?? "") ? [{ kind: "repo-gone", repo }] : [];
+
+    // Needs the App subscribed to Star events. Follows have no webhook; they're polled.
+    case "star":
+      return [{ kind: "activity" }];
 
     case "installation":
       return [{ kind: "resync" }];

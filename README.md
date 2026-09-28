@@ -41,9 +41,13 @@ Security alerts are fetched per repo (3 calls each, up to `TRIAGE_MAX_REPOS`). W
 
 The scan runs in the background in small batches, never inside a page request: see [Security scans](#security-scans) below.
 
+### Stars & followers
+
+The **Stars & followers** panel lists the latest stars on repos you own and your newest followers, from one GraphQL request. Stars carry GitHub's timestamp and arrive live through the Star webhook. GitHub has no follow webhook and doesn't document follow times, so followers are checked every five minutes. Their follow time is read from GitHub's follower cursor, which happens to encode it; if that ever stops working, a follower is dated from when the dashboard first saw them.
+
 ### Caching
 
-The Hub Durable Object is the only cache. It keeps the PR/issue inbox (a single GraphQL request) for about a minute and the last security scan for 15 minutes. **Refresh** refetches the inbox; webhook events also expire it, so the next page load is fresh. In the browser, TanStack Query shares each response across components.
+The Hub Durable Object is the only cache. It keeps the PR/issue inbox (a single GraphQL request) for about a minute the last security scan for 15 minutes, and stars & followers for five minutes. **Refresh** refetches the inbox and stars & followers; webhook events also expire it, so the next page load is fresh. In the browser, TanStack Query shares each response across components.
 
 ## Deploying to Cloudflare
 
@@ -75,7 +79,7 @@ The browser overlays these updates on the snapshot it fetched. A row that arrive
    - Callback URL: `https://<your-host>/auth/callback`. Leave **Expire user authorization tokens** on.
    - Webhook URL: `https://<your-host>/api/github/webhook`, with a random secret.
    - Repository permissions, all **read-only**: Metadata, Pull requests, Issues, Checks, Commit statuses, Contents, Dependabot alerts, Code scanning alerts, Secret scanning alerts. Organization permission: Members (read), so team review requests count.
-   - Subscribe to events: Pull request, Pull request review, Issues, Issue comment, Check suite, Push, Repository, Dependabot alert, Code scanning alert, Secret scanning alert. Installation events are sent to every App anyway.
+   - Subscribe to events: Pull request, Pull request review, Issues, Issue comment, Check suite, Push, Repository, Star, Dependabot alert, Code scanning alert, Secret scanning alert. Installation events are sent to every App anyway.
    - Generate a client secret, then **install** the App on your account and on any orgs in `TRIAGE_OWNERS`.
 2. **Set the configuration.** Put `ALLOWED_LOGINS` (your login) and optionally `TRIAGE_OWNERS` in `wrangler.jsonc` → `vars`. Then add the secrets:
    ```sh

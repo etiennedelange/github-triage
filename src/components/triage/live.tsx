@@ -1,6 +1,6 @@
 import { useEffect, useSyncExternalStore } from "react";
 
-import { refreshAll } from "@/client/api";
+import { queryClient, refreshAll } from "@/client/api";
 import { serverEnvelope, type ServerMessage } from "@/edge/protocol";
 import type { AlertPatch, ItemPatch } from "@/lib/live";
 import { cn } from "@/lib/utils";
@@ -99,6 +99,8 @@ function receive(msg: ServerMessage) {
     update((s) => ({ ...s, alerts: new Map(s.alerts).set(msg.alert.url, { at: msg.at, alert: msg.alert }) }));
   } else if (msg.type === "alert-gone") {
     update((s) => ({ ...s, alerts: new Map(s.alerts).set(msg.url, { at: msg.at, alert: null }) }));
+  } else if (msg.type === "activity") {
+    void queryClient.invalidateQueries({ queryKey: ["activity"] });
   }
   if (gap) resync();
 }

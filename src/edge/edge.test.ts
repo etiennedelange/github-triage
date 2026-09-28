@@ -200,8 +200,13 @@ describe("webhook → changes", () => {
     expect(changesFor("installation_repositories", { action: "added", repositories_added: [] })).toEqual([{ kind: "resync" }]);
   });
 
+  it("turns stars into an activity refetch", () => {
+    expect(changesFor("star", { action: "created", repository })).toEqual([{ kind: "activity" }]);
+    expect(changesFor("star", { action: "deleted", repository })).toEqual([{ kind: "activity" }]);
+  });
+
   it("ignores unknown events and malformed payloads", () => {
-    expect(changesFor("star", { action: "created", repository })).toEqual([]);
+    expect(changesFor("fork", { action: "created", repository })).toEqual([]);
     expect(changesFor("pull_request", "nope")).toEqual([]);
   });
 

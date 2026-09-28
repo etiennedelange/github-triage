@@ -37,6 +37,7 @@ export function LiveInbox({
   contextLine,
   securityStat,
   securityPanel,
+  activityPanel,
 }: {
   inbox: Inbox;
   repo?: string;
@@ -44,6 +45,7 @@ export function LiveInbox({
   contextLine: ReactNode;
   securityStat: ReactNode;
   securityPanel: ReactNode;
+  activityPanel: ReactNode;
 }) {
   useLiveConnection(enabled, inbox.fetchedAt);
   const { items: patches } = useLive();
@@ -107,6 +109,7 @@ export function LiveInbox({
         <Panel id="untriaged" icon={InboxIcon} title="Untriaged issues" count={untriaged.items.length} empty="Every issue on your repos has an owner." footer={more("issues", "untriaged", untriaged)}>
           {untriaged.items.map((i) => <IssueRow key={rowKey(i.url, untriaged.live)} issue={i} live={untriaged.live.has(i.url)} />)}
         </Panel>
+        {activityPanel}
       </div>
     </div>
   );

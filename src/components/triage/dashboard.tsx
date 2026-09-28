@@ -1,6 +1,6 @@
-import { CircleHelp, LogOut, ShieldAlert, TriangleAlert, X } from "lucide-react";
+import { CircleHelp, LogOut, ShieldAlert, Star, TriangleAlert, X } from "lucide-react";
 
-import { useInbox, useRateLimits, useSecurity, useSession } from "@/client/api";
+import { useActivity, useInbox, useRateLimits, useSecurity, useSession } from "@/client/api";
 import { AppLink, useRepoFilter } from "@/client/url";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { Inbox, RateLimits } from "@/lib/github/inbox";
@@ -11,7 +11,7 @@ import { cn } from "@/lib/utils";
 
 import { LiveInbox, LiveSecurityPanel, LiveSecurityStat, Stat } from "./live-inbox";
 import { Panel, PanelSkeleton } from "./panel";
-import { SOURCE, TONE } from "./rows";
+import { ActivityRow, SOURCE, TONE } from "./rows";
 
 /**
  * Three independent queries, so the fast inbox shows before the security report and the
@@ -37,6 +37,7 @@ export function Dashboard() {
       contextLine={<ContextLine inbox={data} repo={repo} oauth={oauth} />}
       securityStat={<SecurityStat repo={repo} />}
       securityPanel={<SecurityPanel repo={repo} oauth={oauth} />}
+      activityPanel={<ActivityPanel repo={repo} oauth={oauth} />}
     />
   );
 }
@@ -167,6 +168,47 @@ function SecurityPanel({ repo, oauth }: { repo?: string; oauth: boolean }) {
         </div>
       }
     />
+  );
+}
+
+// ---------- Stars & followers ----------
+
+function ActivityPanel({ repo, oauth }: { repo?: string; oauth: boolean }) {
+  const { data: result, isError, error } = useActivity();
+  if (!result && !isError) return <PanelSkeleton rows={3} />;
+  if (!result?.ok) {
+    const failure: Failure = result ? result.error : { kind: "unexpected", message: error?.message ?? "Request failed" };
+    return (
+      <Panel id="activity" icon={Star} title="Stars & followers">
+        <li className="p-3">
+          <ErrorCard error={failure} compact oauth={oauth} />
+        </li>
+      </Panel>
+    );
+  }
+  const { events, stars, followers, followersTrackedSince } = result.data;
+  // A repo filter keeps that repo's stars; follows aren't about any repo.
+  const shown = repo ? events.filter((e) => e.kind === "star" && e.repo === repo) : events;
+  const unknownFollows = events.some((e) => e.kind === "follow" && !e.exact);
+  return (
+    <Panel
+      id="activity"
+      icon={Star}
+      title="Stars & followers"
+      count={shown.length}
+      empty={repo ? "No stars on this repo yet." : "No stars or followers yet."}
+      footer={
+        <p>
+          {stars.toLocaleString()} {stars === 1 ? "star" : "stars"} across your repos · {followers.toLocaleString()}{" "}
+          {followers === 1 ? "follower" : "followers"}
+          {unknownFollows && ` · "first seen" follows are dated from when this dashboard noticed them (tracking since ${new Date(followersTrackedSince).toLocaleDateString()})`}
+        </p>
+      }
+    >
+      {shown.map((e) => (
+        <ActivityRow key={`${e.kind}:${e.user.login}:${e.kind === "star" ? e.repo : ""}`} event={e} />
+      ))}
+    </Panel>
   );
 }
 

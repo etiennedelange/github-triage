@@ -13,7 +13,9 @@ export type ServerMessage =
   /** Gone or no longer readable (deleted, transferred, access lost): remove every URL listed. */
   | { type: "gone"; seq: number; at: number; urls: string[] }
   | { type: "alert"; seq: number; at: number; alert: SecurityAlert }
-  | { type: "alert-gone"; seq: number; at: number; url: string };
+  | { type: "alert-gone"; seq: number; at: number; url: string }
+  /** Stars changed: refetch the activity panel. */
+  | { type: "activity"; seq: number; at: number };
 
 /** Browser → server, sent on every (re)connect with the snapshot the page was rendered from. */
 export const clientHello = z.object({ type: z.literal("hello"), fetchedAt: z.string() });
@@ -21,6 +23,6 @@ export type ClientHello = z.infer<typeof clientHello>;
 
 // Minimal envelope check on the browser side; the Hub is trusted for the payload itself.
 export const serverEnvelope = z.looseObject({
-  type: z.enum(["welcome", "resync", "item", "gone", "alert", "alert-gone"]),
+  type: z.enum(["welcome", "resync", "item", "gone", "alert", "alert-gone", "activity"]),
   seq: z.number(),
 });
