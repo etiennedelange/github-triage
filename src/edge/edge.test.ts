@@ -200,9 +200,12 @@ describe("webhook → changes", () => {
     expect(changesFor("installation_repositories", { action: "added", repositories_added: [] })).toEqual([{ kind: "resync" }]);
   });
 
-  it("turns stars into an activity refetch", () => {
-    expect(changesFor("star", { action: "created", repository })).toEqual([{ kind: "activity" }]);
-    expect(changesFor("star", { action: "deleted", repository })).toEqual([{ kind: "activity" }]);
+  it("carries who starred, where and when", () => {
+    const sender = { login: "fan", avatar_url: "a", html_url: "https://github.com/fan" };
+    const star = { kind: "star", at: "2026-09-28T10:00:00Z", user: { login: "fan", avatarUrl: "a", url: "https://github.com/fan" }, repo: "acme/api" };
+    expect(changesFor("star", { action: "created", repository, sender, starred_at: star.at })).toEqual([{ kind: "star", starred: true, star }]);
+    expect(changesFor("star", { action: "deleted", repository, sender, starred_at: null })).toMatchObject([{ kind: "star", starred: false }]);
+    expect(changesFor("star", { action: "created", repository })).toEqual([]);
   });
 
   it("ignores unknown events and malformed payloads", () => {
