@@ -56,3 +56,25 @@ export async function refreshAll(): Promise<void> {
   queryClient.setQueryData(["activity"], activity);
   await queryClient.invalidateQueries({ predicate: (q) => q.queryKey[0] === "rate-limits" || q.queryKey[0] === "security" });
 }
+
+// ---------- Fix with Claude ----------
+
+/** Runs you started; the live socket invalidates this when one moves on. */
+export const useClaudeRuns = () => useQuery({ queryKey: ["claude"], queryFn: async () => json(await api.claude.$get()) });
+
+/** Asked when the popover opens, and at most once a minute per repo. */
+export const useClaudeSetup = (repo: string, enabled: boolean) =>
+  useQuery({
+    queryKey: ["claude-setup", repo],
+    queryFn: async () => json(await api.claude.setup.$get({ query: { repo } })),
+    enabled,
+  });
+
+export async function requestClaude(repo: string, number: number, body: string) {
+  const res = await api.claude.$post({ json: { repo, number, body } });
+  // A 400 carries zod's message as text; show it rather than a status line.
+  if (res.status === 400) return { ok: false as const, error: { kind: "unexpected" as const, message: await res.text() } };
+  const result = await json(res);
+  if (result.ok) await queryClient.invalidateQueries({ queryKey: ["claude"] });
+  return result;
+}

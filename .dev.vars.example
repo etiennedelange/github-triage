@@ -3,7 +3,8 @@
 # --- Local mode (simplest): no GitHub App, no sign-in, only reachable on localhost. ---
 # A personal token, e.g. the output of `gh auth token` (add `security_events` for alerts:
 # `gh auth refresh -s security_events`). Fine-grained: read access to Metadata, Pull requests,
-# Issues, Dependabot alerts, Code scanning alerts and Secret scanning alerts.
+# Issues, Dependabot alerts, Code scanning alerts and Secret scanning alerts. Fix with Claude
+# posts an issue comment, which needs Issues: write (classic tokens: `repo`, as `gh` has).
 GITHUB_TOKEN=
 
 # --- OAuth mode: like production. Use a separate dev GitHub App whose callback is

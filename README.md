@@ -23,7 +23,7 @@ One pane for everything on GitHub that's waiting on you: pull requests, issues a
 
 Click any repo name (or a chip) to filter everything to that repo; the filter lives in the URL (`?repo=owner/name`). Items untouched for 14+ days are marked stale.
 
-The app is **read-only**: it never writes to GitHub.
+The app only reads from GitHub, with one exception: **Fix with Claude** posts the comment you write (below).
 
 ## Running it
 
@@ -44,6 +44,14 @@ The scan runs in the background in small batches, never inside a page request: s
 ### Stars & followers
 
 The **Stars & followers** panel lists the latest stars and new watchers on repos you own and your newest followers, from one GraphQL request. Stars carry GitHub's timestamp and arrive live through the Star webhook. GitHub won't list a repo's stargazers to the App's sign-in token, so on the deployed app the Hub records stars from those webhooks instead, and only stars from after it started recording are shown. GitHub has no follow webhook and doesn't document follow times, so followers are checked every five minutes. Their follow time is read from GitHub's follower cursor, which happens to encode it; if that ever stops working, a follower is dated from when the dashboard first saw them. Watchers have neither a webhook nor any date, so they're always dated from when the dashboard first saw them; people already watching when tracking started aren't listed.
+
+### Fix with Claude
+
+Issue rows in **Assigned to you** and **Untriaged issues** have a ✦ button. It opens a comment starting with `@claude` that you can edit, and posts it on the issue. The [Claude GitHub Action](https://github.com/anthropics/claude-code-action) then picks it up and works on a fix. When the popover opens, the Hub checks that repo's `.github/workflows` for the Action. If it's missing, the popover says so and won't post, because nothing would answer. Set the Action up by running `/install-github-app` in Claude Code in that repo.
+
+After you post, the row shows how far the run has got: *Asked Claude*, then *Claude working* when `claude[bot]` comments, then *Branch ready* when it pushes `claude/issue-<n>-…`, which links to the compare view to open the PR. If a PR is opened from that branch, the row shows *PR open*. Progress comes from the Issue comment, Push and Pull request webhooks, so in local mode (no webhooks) a run stays at *Asked Claude*. The run is still on GitHub.
+
+This is the only write, so it needs write access to issues: **Issues: Read and write** on the GitHub App, or a token that can comment in local mode. Without it, GitHub's 403 is shown in the popover.
 
 ### Caching
 
@@ -78,7 +86,7 @@ The browser overlays these updates on the snapshot it fetched. A row that arrive
 1. **Create a GitHub App** (Settings → Developer settings → GitHub Apps → New):
    - Callback URL: `https://<your-host>/auth/callback`. Leave **Expire user authorization tokens** on.
    - Webhook URL: `https://<your-host>/api/github/webhook`, with a random secret.
-   - Repository permissions, all **read-only**: Metadata, Pull requests, Issues, Checks, Commit statuses, Contents, Dependabot alerts, Code scanning alerts, Secret scanning alerts. Organization permission: Members (read), so team review requests count.
+   - Repository permissions: **Issues: Read and write** (only for [Fix with Claude](#fix-with-claude)); everything else **read-only**: Metadata, Pull requests, Checks, Commit statuses, Contents, Dependabot alerts, Code scanning alerts, Secret scanning alerts. Organization permission: Members (read), so team review requests count.
    - Subscribe to events: Pull request, Pull request review, Issues, Issue comment, Check suite, Push, Repository, Star, Dependabot alert, Code scanning alert, Secret scanning alert. Installation events are sent to every App anyway.
    - Generate a client secret, then **install** the App on your account and on any orgs in `TRIAGE_OWNERS`.
 2. **Set the configuration.** Put `ALLOWED_LOGINS` (your login) and optionally `TRIAGE_OWNERS` in `wrangler.jsonc` → `vars`. Then add the secrets:

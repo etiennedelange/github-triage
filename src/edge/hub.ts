@@ -1,5 +1,7 @@
 import { DurableObject } from "cloudflare:workers";
 
+import { advanceRun, claudeKey, pruneRuns, TRIGGER, type ClaudeRun, type ClaudeRuns, type ClaudeSignal } from "@/lib/claude";
+import { hasClaudeWorkflow, postIssueComment } from "@/lib/github/claude";
 import { GitHubError, mapLimit, type GitHubAuth } from "@/lib/github/http";
 import { diffSeen, fetchSnapshot, logStar, toActivity, watcherKey, type Activity, type Seen, type StarLog } from "@/lib/github/activity";
 import { fetchInbox, fetchRateLimits, fetchViewerLogin, type Inbox, type RateLimits } from "@/lib/github/inbox";
@@ -110,6 +112,9 @@ export class Hub extends DurableObject<EdgeEnv> {
       await this.ctx.storage.put("starLog", log);
       await this.ctx.storage.delete("activity");
     }
+    // Claude runs advance with nobody watching too, like the star log.
+    const signals = changes.flatMap((c) => (c.kind === "claude" ? [c.signal] : []));
+    const claude = signals.length > 0 && (await this.advanceClaude(signals));
     // Before the no-tab return: the stored scan must forget the repo even with nobody watching.
     const goneRepos = changes.flatMap((c) => (c.kind === "repo-gone" ? [c.repo] : []));
     const goneAlerts = goneRepos.length ? await this.forgetRepos(goneRepos) : [];
@@ -118,6 +123,7 @@ export class Hub extends DurableObject<EdgeEnv> {
 
     for (const url of goneAlerts) this.broadcast({ type: "alert-gone", at, url });
     if (activity) this.broadcast({ type: "activity", at });
+    if (claude) this.broadcast({ type: "claude", at });
     const keys: QueueKey[] = [];
     for (const c of changes) {
       if (c.kind === "subject") keys.push(c.key);
@@ -178,6 +184,41 @@ export class Hub extends DurableObject<EdgeEnv> {
     const fresh: StarLog = { since: new Date().toISOString(), stars: [] };
     await this.ctx.storage.put("starLog", fresh);
     return fresh;
+  }
+
+  // ---------- RPC: Fix with Claude ----------
+
+  getClaudeRuns(): Promise<Result<ClaudeRuns>> {
+    return asResult(async () => pruneRuns((await this.ctx.storage.get<ClaudeRuns>("claudeRuns")) ?? {}));
+  }
+
+  /** Whether the repo runs the Claude GitHub Action, so an @claude comment gets answered. Uncached. */
+  claudeSetup(repo: string): Promise<Result<boolean>> {
+    return asResult(() => this.withAuth((auth) => hasClaudeWorkflow(auth, repo)));
+  }
+
+  /** Posts your @claude comment on the issue and starts tracking the run. Asking again restarts it. */
+  requestClaude(repo: string, number: number, body: string): Promise<Result<ClaudeRun>> {
+    return asResult(async () => {
+      if (!body.includes(TRIGGER)) throw new Error(`The comment needs "${TRIGGER}" in it, or the Action won't answer.`);
+      const commentUrl = await this.withAuth((auth) => postIssueComment(auth, repo, number, body));
+      const now = new Date().toISOString();
+      const run: ClaudeRun = { repo, number, state: "requested", requestedAt: now, updatedAt: now, commentUrl };
+      const runs = pruneRuns((await this.ctx.storage.get<ClaudeRuns>("claudeRuns")) ?? {});
+      await this.ctx.storage.put("claudeRuns", { ...runs, [claudeKey(repo, number)]: run });
+      this.broadcast({ type: "claude", at: Date.now() });
+      return run;
+    });
+  }
+
+  /** Applies webhook progress to stored runs; true if any run changed. */
+  private async advanceClaude(signals: ClaudeSignal[]): Promise<boolean> {
+    const before = (await this.ctx.storage.get<ClaudeRuns>("claudeRuns")) ?? {};
+    const now = new Date().toISOString();
+    const after = signals.reduce((runs, sig) => advanceRun(runs, sig, now), before);
+    if (after === before) return false;
+    await this.ctx.storage.put("claudeRuns", after);
+    return true;
   }
 
   /** Live, uncached: `/rate_limit` costs nothing against either budget. */

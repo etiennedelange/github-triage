@@ -26,8 +26,14 @@ function headers(token: string): HeadersInit {
 
 const base = (api?: string) => (api ?? DEFAULT_API).replace(/\/$/, "");
 
-export async function rest<T>({ token, api }: GitHubAuth, path: string): Promise<T> {
-  const res = await fetch(`${base(api)}${path}`, { headers: headers(token), cache: "no-store" });
+/** A GET, or a POST when `body` is given. */
+export async function rest<T>({ token, api }: GitHubAuth, path: string, body?: unknown): Promise<T> {
+  const res = await fetch(`${base(api)}${path}`, {
+    method: body === undefined ? "GET" : "POST",
+    headers: headers(token),
+    body: body === undefined ? undefined : JSON.stringify(body),
+    cache: "no-store",
+  });
   if (!res.ok) {
     const body = (await res.json().catch(() => ({}))) as { message?: string };
     throw new GitHubError(body.message ?? res.statusText, res.status);

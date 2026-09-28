@@ -16,7 +16,23 @@ function graphql(query: string): unknown {
   return { viewer: { organizations: { nodes: [] } } };
 }
 
-function rest(path: string): { status: number; body: unknown } {
+/** Fix with Claude: acme/storefront runs the Claude Action; acme/api has CI only. */
+const WORKFLOWS: Record<string, Record<string, string>> = {
+  "acme/storefront": { "ci.yml": "steps:\n  - uses: actions/checkout@v4\n", "claude.yml": "steps:\n  - uses: anthropics/claude-code-action@v1\n" },
+  "acme/api": { "ci.yml": "steps:\n  - uses: actions/checkout@v4\n" },
+};
+
+function rest(path: string, method = "GET"): { status: number; body: unknown } {
+  const comment = path.match(/^\/repos\/([^/]+\/[^/]+)\/issues\/(\d+)\/comments$/);
+  if (comment && method === "POST") return { status: 201, body: { html_url: `https://github.com/${comment[1]}/issues/${comment[2]}#issuecomment-1` } };
+  const wf = path.match(/^\/repos\/([^/]+\/[^/]+)\/contents\/\.github\/workflows(?:\/(.+))?$/);
+  if (wf) {
+    const files = WORKFLOWS[wf[1]];
+    if (!files) return { status: 404, body: { message: "Not Found" } };
+    if (!wf[2]) return { status: 200, body: Object.keys(files).map((name) => ({ name, path: `.github/workflows/${name}`, type: "file" })) };
+    const text = files[wf[2]];
+    return text ? { status: 200, body: { content: btoa(text), encoding: "base64" } } : { status: 404, body: { message: "Not Found" } };
+  }
   if (path === "/rate_limit") return { status: 200, body: rateLimit() };
   if (path === "/user/repos") return { status: 200, body: userRepos() };
   const m = path.match(/^\/repos\/([^/]+\/[^/]+)\/(dependabot|code-scanning|secret-scanning)\/alerts$/);
@@ -41,7 +57,7 @@ export function startMockGitHub(port: number): Promise<Server> {
       req.on("end", () => send(200, { data: graphql((JSON.parse(raw) as { query: string }).query) }));
       return;
     }
-    const { status, body } = rest(url.pathname);
+    const { status, body } = rest(url.pathname, req.method);
     send(status, body);
   });
   return new Promise((resolve) => server.listen(port, "127.0.0.1", () => resolve(server)));

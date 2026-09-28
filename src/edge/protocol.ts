@@ -15,7 +15,9 @@ export type ServerMessage =
   | { type: "alert"; seq: number; at: number; alert: SecurityAlert }
   | { type: "alert-gone"; seq: number; at: number; url: string }
   /** Stars changed: refetch the activity panel. */
-  | { type: "activity"; seq: number; at: number };
+  | { type: "activity"; seq: number; at: number }
+  /** A "Fix with Claude" run changed: refetch the runs. */
+  | { type: "claude"; seq: number; at: number };
 
 /** Browser → server, sent on every (re)connect with the snapshot the page was rendered from. */
 export const clientHello = z.object({ type: z.literal("hello"), fetchedAt: z.string() });
@@ -23,6 +25,6 @@ export type ClientHello = z.infer<typeof clientHello>;
 
 // Minimal envelope check on the browser side; the Hub is trusted for the payload itself.
 export const serverEnvelope = z.looseObject({
-  type: z.enum(["welcome", "resync", "item", "gone", "alert", "alert-gone", "activity"]),
+  type: z.enum(["welcome", "resync", "item", "gone", "alert", "alert-gone", "activity", "claude"]),
   seq: z.number(),
 });
