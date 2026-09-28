@@ -4,6 +4,7 @@ import { advanceRun, claudeKey, isActiveRun, pruneRuns, TRIGGER, type ClaudeRun,
 import { fetchRunProgress, hasClaudeWorkflow, postIssueComment } from "@/lib/github/claude";
 import { GitHubError, mapLimit, type GitHubAuth } from "@/lib/github/http";
 import { diffSeen, fetchSnapshot, logStar, toActivity, watcherKey, type Activity, type Seen, type StarLog } from "@/lib/github/activity";
+import { fetchBranches, type BranchReport } from "@/lib/github/branches";
 import { fetchInbox, fetchRateLimits, fetchViewerLogin, type Inbox, type RateLimits } from "@/lib/github/inbox";
 import { asResult, MissingTokenError, ScanPendingError, type Result } from "@/lib/github/result";
 import { listInstalledRepos, listOwnedRepos, scanOne, SCANNERS, type SecurityReport } from "@/lib/github/security";
@@ -29,6 +30,8 @@ const INBOX_MAX_AGE_MS = 60_000;
 const DELIVERIES_KEPT = 200;
 /** Stars arrive by webhook; follows don't, so this is how late a new follower can show up. */
 const ACTIVITY_MAX_AGE_MS = 5 * 60_000;
+/** Push and PR-closed webhooks end it early; without webhooks (local mode) this is the lag. */
+const BRANCHES_MAX_AGE_MS = 15 * 60_000;
 
 /** How often an active Claude run is checked on GitHub when its runs are read. */
 const CLAUDE_CHECK_MS = 20_000;
@@ -89,7 +92,7 @@ export class Hub extends DurableObject<EdgeEnv> {
   }
 
   async signOut(): Promise<void> {
-    await this.ctx.storage.delete(["tokens", "teams", "inbox", "activity"]);
+    await this.ctx.storage.delete(["tokens", "teams", "inbox", "activity", "branches"]);
     for (const ws of this.ctx.getWebSockets()) ws.close(4001, "Signed out");
   }
 
@@ -114,6 +117,8 @@ export class Hub extends DurableObject<EdgeEnv> {
       await this.ctx.storage.put("starLog", log);
       await this.ctx.storage.delete("activity");
     }
+    const branches = changes.some((c) => c.kind === "branches");
+    if (branches) await this.ctx.storage.delete("branches");
     // Claude runs advance with nobody watching too, like the star log.
     const signals = changes.flatMap((c) => (c.kind === "claude" ? [c.signal] : []));
     const claude = signals.length > 0 && (await this.advanceClaude(signals));
@@ -125,6 +130,7 @@ export class Hub extends DurableObject<EdgeEnv> {
 
     for (const url of goneAlerts) this.broadcast({ type: "alert-gone", at, url });
     if (activity) this.broadcast({ type: "activity", at });
+    if (branches) this.broadcast({ type: "branches", at });
     if (claude) this.broadcast({ type: "claude", at });
     const keys: QueueKey[] = [];
     for (const c of changes) {
@@ -186,6 +192,18 @@ export class Hub extends DurableObject<EdgeEnv> {
       const activity = toActivity(snap, { followers: followers.seen, watchers: watchers.seen }, await this.starLog(), fetchedAt);
       await this.ctx.storage.put({ followers, watchers, activity });
       return activity;
+    });
+  }
+
+  /** Stale branches, from storage for 15 minutes; `force` (Refresh) refetches. One GraphQL request. */
+  getBranches(force = false): Promise<Result<BranchReport>> {
+    return asResult(async () => {
+      const cached = await this.ctx.storage.get<BranchReport>("branches");
+      if (!force && cached && Date.now() - Date.parse(cached.fetchedAt) < BRANCHES_MAX_AGE_MS) return cached;
+      const owners = [await this.viewerLogin(), ...splitList(this.env.TRIAGE_OWNERS)];
+      const report = await this.withAuth((auth) => fetchBranches(auth, owners, Number(this.env.TRIAGE_MAX_REPOS) || 50));
+      await this.ctx.storage.put("branches", report);
+      return report;
     });
   }
 

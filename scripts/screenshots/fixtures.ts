@@ -330,3 +330,33 @@ export const ALERTS: Record<string, Record<"dependabot" | "code-scanning" | "sec
   },
   "demo/dotfiles": { dependabot: [], "code-scanning": null, "secret-scanning": [] },
 };
+
+/** Stale branches: `hours` since the last commit; a PR closed an hour after it, if any. */
+export function branches() {
+  const ref = (name: string, hours: number, pr?: { number: number; state: "OPEN" | "CLOSED" | "MERGED" }, repo = "acme/storefront") => ({
+    name,
+    target: { committedDate: ago(hours), author: { name: VIEWER, user: { login: VIEWER } } },
+    associatedPullRequests: {
+      nodes: pr
+        ? [{ ...pr, url: `https://github.com/${repo}/pull/${pr.number}`, closedAt: pr.state === "OPEN" ? null : ago(hours - 1) }]
+        : [],
+    },
+  });
+  const repo = (nameWithOwner: string, refs: ReturnType<typeof ref>[]) => ({
+    nameWithOwner,
+    url: `https://github.com/${nameWithOwner}`,
+    defaultBranchRef: { name: "main" },
+    refs: { totalCount: refs.length + 1, nodes: [ref("main", 2), ...refs] },
+  });
+  return {
+    viewer: {
+      repositories: {
+        nodes: [
+          repo("acme/storefront", [ref("feat/cart-drawer", 30, { number: 412, state: "MERGED" }), ref("spike/edge-cache", 24 * 40)]),
+          repo("acme/api", [ref("fix/rate-limit-headers", 50, { number: 88, state: "CLOSED" }, "acme/api")]),
+          repo("demo/dotfiles", []),
+        ],
+      },
+    },
+  };
+}

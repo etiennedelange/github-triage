@@ -6,6 +6,7 @@ import {
   CircleX,
   Code,
   Eye,
+  GitBranch,
   GitPullRequest,
   GitPullRequestDraft,
   KeyRound,
@@ -18,6 +19,7 @@ import type { ReactNode } from "react";
 
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { ActivityEvent } from "@/lib/github/activity";
+import type { StaleBranch, StaleReason } from "@/lib/github/branches";
 import {
   isStale,
   prNextStep,
@@ -313,6 +315,41 @@ export function AlertRow({ alert, live }: LiveProp & { alert: SecurityAlert }) {
       trailing={
         <Pill tone={SEVERITY_TONE[alert.severity]} className="capitalize">
           {alert.severity}
+        </Pill>
+      }
+    />
+  );
+}
+
+const BRANCH_REASON: Record<StaleReason, { label: string; tone: Tone; hint: string }> = {
+  merged: { label: "Merged", tone: "success", hint: "Its pull request was merged: safe to delete" },
+  closed: { label: "PR closed", tone: "muted", hint: "Its pull request was closed without merging" },
+  idle: { label: "No PR", tone: "warning", hint: "Never had a pull request, and nothing pushed for a while" },
+};
+
+/** A branch left behind on one of your repos. Links to the branch; the pill says why it's listed. */
+export function BranchRow({ branch }: { branch: StaleBranch }) {
+  const reason = BRANCH_REASON[branch.reason];
+  return (
+    <Row
+      icon={<GitBranch aria-hidden className="size-4 text-muted-foreground" />}
+      title={branch.name}
+      url={branch.url}
+      meta={
+        <>
+          <RepoLink repo={branch.repo} />
+          <span>{branch.author}</span>
+          <Age iso={branch.committedAt} verb="last commit" flagStale={false} />
+          {branch.pr && (
+            <a href={branch.pr.url} target="_blank" rel="noreferrer" className="-my-1.5 py-1.5 hover:text-foreground hover:underline">
+              #{branch.pr.number}
+            </a>
+          )}
+        </>
+      }
+      trailing={
+        <Pill tone={reason.tone}>
+          <span title={reason.hint}>{reason.label}</span>
         </Pill>
       }
     />

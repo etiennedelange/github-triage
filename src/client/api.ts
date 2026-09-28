@@ -48,6 +48,9 @@ export const useInbox = () => useQuery({ queryKey: ["inbox"], queryFn: async () 
 export const useActivity = () =>
   useQuery({ queryKey: ["activity"], queryFn: async () => json(await api.activity.$get()), refetchInterval: 5 * 60_000 });
 
+/** Push and PR-closed webhooks invalidate this over the live socket. */
+export const useBranches = () => useQuery({ queryKey: ["branches"], queryFn: async () => json(await api.branches.$get()) });
+
 export const useRateLimits = () =>
   useQuery({ queryKey: ["rate-limits"], queryFn: async () => json(await api["rate-limits"].$get()), refetchInterval: 60_000 });
 
@@ -60,14 +63,19 @@ export const useSecurity = () =>
   });
 
 /**
- * Refresh: the Hub refetches the inbox from GitHub and returns it. The security scan isn't
+ * Refresh: the Hub refetches the inbox, stars and stale branches from GitHub and returns them. The security scan isn't
  * redone (it's expensive and runs on its own schedule), but the stored one is reread: it may
  * have finished, or dropped a deleted repo, since this tab loaded it.
  */
 export async function refreshAll(): Promise<void> {
-  const [inbox, activity] = await Promise.all([api.refresh.$post().then(json), api.activity.$post().then(json)]);
+  const [inbox, activity, branches] = await Promise.all([
+    api.refresh.$post().then(json),
+    api.activity.$post().then(json),
+    api.branches.$post().then(json),
+  ]);
   queryClient.setQueryData(["inbox"], inbox);
   queryClient.setQueryData(["activity"], activity);
+  queryClient.setQueryData(["branches"], branches);
   await queryClient.invalidateQueries({ predicate: (q) => q.queryKey[0] === "rate-limits" || q.queryKey[0] === "security" });
 }
 

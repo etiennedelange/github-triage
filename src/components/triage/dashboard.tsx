@@ -1,17 +1,17 @@
-import { CircleHelp, LogOut, ShieldAlert, Star, TriangleAlert, X } from "lucide-react";
+import { CircleHelp, GitBranch, LogOut, ShieldAlert, Star, TriangleAlert, X } from "lucide-react";
 
-import { useActivity, useInbox, useRateLimits, useSecurity, useSession } from "@/client/api";
+import { useActivity, useBranches, useInbox, useRateLimits, useSecurity, useSession } from "@/client/api";
 import { AppLink, useRepoFilter } from "@/client/url";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { Inbox, RateLimits } from "@/lib/github/inbox";
 import type { Failure } from "@/lib/github/result";
 import type { SecurityReport } from "@/lib/github/security";
-import { ago, type AlertSource } from "@/lib/triage";
+import { ago, filterByRepo, STALE_DAYS, type AlertSource } from "@/lib/triage";
 import { cn } from "@/lib/utils";
 
 import { LiveInbox, LiveSecurityPanel, LiveSecurityStat, Stat } from "./live-inbox";
 import { Panel, PanelSkeleton } from "./panel";
-import { ActivityRow, SOURCE, TONE } from "./rows";
+import { ActivityRow, BranchRow, SOURCE, TONE } from "./rows";
 
 /**
  * Three independent queries, so the fast inbox shows before the security report and the
@@ -37,6 +37,7 @@ export function Dashboard() {
       contextLine={<ContextLine inbox={data} repo={repo} oauth={oauth} />}
       securityStat={<SecurityStat repo={repo} />}
       securityPanel={<SecurityPanel repo={repo} oauth={oauth} />}
+      branchesPanel={<BranchesPanel repo={repo} oauth={oauth} />}
       activityPanel={<ActivityPanel repo={repo} oauth={oauth} />}
     />
   );
@@ -177,6 +178,48 @@ function SecurityPanel({ repo, oauth }: { repo?: string; oauth: boolean }) {
   );
 }
 
+// ---------- Stale branches ----------
+
+function BranchesPanel({ repo, oauth }: { repo?: string; oauth: boolean }) {
+  const { data: result, isError, error } = useBranches();
+  if (!result && !isError) return <PanelSkeleton rows={3} />;
+  if (!result?.ok) {
+    const failure: Failure = result ? result.error : { kind: "unexpected", message: error?.message ?? "Request failed" };
+    return (
+      <Panel quiet id="branches" icon={GitBranch} title="Stale branches">
+        <li className="p-3">
+          <ErrorCard error={failure} compact oauth={oauth} />
+        </li>
+      </Panel>
+    );
+  }
+  const { branches, repos, truncated, fetchedAt } = result.data;
+  const shown = filterByRepo(branches, repo);
+  return (
+    <Panel
+      quiet
+      id="branches"
+      icon={GitBranch}
+      title="Stale branches"
+      count={shown.length}
+      empty={repo ? "No stale branches on this repo." : "No stale branches on your repos."}
+      footer={
+        <div className="space-y-1">
+          <p>
+            Merged or closed PRs whose branch is still there, and branches with no PR and no commits for {STALE_DAYS}+ days · {repos}{" "}
+            {repos === 1 ? "repo" : "repos"} checked {ago(fetchedAt)}
+          </p>
+          {truncated.length > 0 && <p>Only the first 100 branches checked for: {truncated.join(", ")}</p>}
+        </div>
+      }
+    >
+      {shown.map((b) => (
+        <BranchRow key={`${b.repo}:${b.name}`} branch={b} />
+      ))}
+    </Panel>
+  );
+}
+
 // ---------- Stars & followers ----------
 
 function ActivityPanel({ repo, oauth }: { repo?: string; oauth: boolean }) {
@@ -293,7 +336,7 @@ export function DashboardSkeleton() {
         ))}
       </div>
       <div className="grid gap-3 lg:grid-cols-2">
-        {Array.from({ length: 6 }, (_, i) => (
+        {Array.from({ length: 8 }, (_, i) => (
           <PanelSkeleton key={i} />
         ))}
       </div>
