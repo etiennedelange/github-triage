@@ -6,8 +6,9 @@ import type { InboxSection, Issue, PullRequest, SecurityAlert } from "@/lib/tria
 
 /** Server → browser. `seq` increases by one per broadcast; a gap means a message was missed. */
 export type ServerMessage =
-  | { type: "welcome"; seq: number }
-  | { type: "resync"; seq: number }
+  /** `build`: the deployed app's build ID. A tab built from another one should reload. */
+  | { type: "welcome"; seq: number; build: string }
+  | { type: "resync"; seq: number; build: string }
   /** An item's current state and the sections it now belongs in (empty = remove it everywhere). */
   | { type: "item"; seq: number; at: number; item: PullRequest | Issue; sections: InboxSection[] }
   /** Gone or no longer readable (deleted, transferred, access lost): remove every URL listed. */

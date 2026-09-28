@@ -132,7 +132,7 @@ export class Hub extends DurableObject<EdgeEnv> {
       else if (c.kind === "repo-prs") keys.push(`prs:${c.repo}`);
       else if (c.kind === "alert") this.broadcast({ type: "alert", at, alert: c.alert });
       else if (c.kind === "alert-gone") this.broadcast({ type: "alert-gone", at, url: c.url });
-      else if (c.kind === "resync") this.broadcast({ type: "resync" });
+      else if (c.kind === "resync") this.broadcast({ type: "resync", build: __BUILD_ID__ });
       else if (c.kind === "alert-refetch") {
         const alert = await this.withAuth((auth) => fetchAlert(auth, c.repo, c.source, c.number)).catch(() => undefined);
         if (alert) this.broadcast({ type: "alert", at, alert });
@@ -340,7 +340,7 @@ export class Hub extends DurableObject<EdgeEnv> {
     const seq = this.seq;
     const lastEventAt = (await this.ctx.storage.get<number>("lastEventAt")) ?? 0;
     const stale = lastEventAt > Date.parse(hello.data.fetchedAt);
-    ws.send(JSON.stringify({ type: stale ? "resync" : "welcome", seq } satisfies ServerMessage));
+    ws.send(JSON.stringify({ type: stale ? "resync" : "welcome", seq, build: __BUILD_ID__ } satisfies ServerMessage));
 
     // First watcher: start the catch-up poll from now.
     if (!(await this.ctx.storage.get<number>("nextPollAt"))) {

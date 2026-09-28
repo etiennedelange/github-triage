@@ -2,7 +2,7 @@ import { ShieldCheck } from "lucide-react";
 
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Dashboard } from "@/components/triage/dashboard";
-import { LiveStatus } from "@/components/triage/live";
+import { LiveStatus, NewVersion } from "@/components/triage/live";
 import { FxToggle, RefreshButton } from "@/components/triage/refresh-button";
 import { RefreshFx } from "@/components/triage/refresh-fx";
 
@@ -20,6 +20,7 @@ export function App() {
         <ShieldCheck aria-hidden className="size-5" />
         <h1 className="text-base font-semibold tracking-tight whitespace-nowrap">GitHub Triage</h1>
         <div className="ml-auto flex items-center gap-1.5 sm:gap-2">
+          <NewVersion />
           <LiveStatus />
           <RefreshButton />
           <FxToggle />
