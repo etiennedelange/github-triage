@@ -7,7 +7,13 @@
     "ghcr.io/anthropics/devcontainer-features/claude-code:1.0": {}
   },
 
-  "mounts": ["source=claude-code-config-${devcontainerId},target=/home/node/.claude,type=volume"],
+  // OpenCode's data dir holds its credentials (auth.json) and sessions, its
+  // config dir the user-level opencode.json. post-create.sh hands them over.
+  "mounts": [
+    "source=claude-code-config-${devcontainerId},target=/home/node/.claude,type=volume",
+    "source=opencode-data-${devcontainerId},target=/home/node/.local/share/opencode,type=volume",
+    "source=opencode-config-${devcontainerId},target=/home/node/.config/opencode,type=volume"
+  ],
 
   "customizations": {
     "vscode": {
@@ -23,5 +29,5 @@
 
   "forwardPorts": [3000],
 
-  "postCreateCommand": "sudo chown -R node:node /home/node/.claude && corepack enable"
+  "postCreateCommand": "bash .devcontainer/post-create.sh"
 }
