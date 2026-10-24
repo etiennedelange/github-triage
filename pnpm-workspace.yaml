@@ -41,9 +41,3 @@ peerDependencyRules:
     - vite
   allowedVersions:
     vite: "*"
-# Advisories `pnpm audit` (audit.yml) should skip. Each needs a reason, and goes once it's fixed.
-auditConfig:
-  ignoreGhsas:
-    # zod 3.x memory exhaustion (fixed only in 4.6.6). The only zod 3 copy is the shadcn CLI's
-    # MCP server (shadcn > @modelcontextprotocol/sdk); the app imports just shadcn's CSS.
-    - GHSA-mrhx-c7xc-m3w5
